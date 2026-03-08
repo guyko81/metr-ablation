@@ -2,7 +2,7 @@
 
 Three drop-in improvements to [METR's Time Horizon benchmark](https://metr.org/blog/2025-03-19-measuring-ai-agent-time-horizons/) methodology, validated with 5-fold cross-validation on 18 frontier AI models.
 
-**[Interactive Viewer](https://[USERNAME].github.io/metr-ablation/)** | **[Paper (arXiv)](https://arxiv.org/abs/[ARXIV-ID])**
+**[Interactive Viewer](https://guyko81.github.io/metr-ablation/)** | **[Paper (arXiv)](https://arxiv.org/abs/[ARXIV-ID])**
 
 ## Key Result
 
