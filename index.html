@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Improving Curve Fitting for AI Capability Time Horizons</title>
+<style>
+  :root {
+    --green: #1b5e20;
+    --green-light: #e8f5e9;
+    --green-mid: #43a047;
+    --text: #333;
+    --muted: #666;
+    --bg: #f8f9fa;
+    --card-bg: #fff;
+    --border: #ddd;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+  .hero {
+    background: linear-gradient(135deg, var(--green) 0%, #2e7d32 100%);
+    color: white; padding: 48px 24px; text-align: center;
+  }
+  .hero h1 { font-size: 28px; max-width: 800px; margin: 0 auto 12px; line-height: 1.3; }
+  .hero .subtitle { font-size: 15px; opacity: 0.9; max-width: 700px; margin: 0 auto 20px; }
+  .hero .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 20px; font-size: 13px; margin: 4px; }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  .paper-link {
+    background: var(--card-bg); border: 2px solid var(--green); border-radius: 10px;
+    padding: 20px 24px; margin: -24px auto 32px; max-width: 700px;
+    text-align: center; position: relative; z-index: 10;
+  }
+  .paper-link p { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+  .paper-link a {
+    display: inline-block; background: var(--green); color: white;
+    padding: 10px 24px; border-radius: 6px; text-decoration: none;
+    font-weight: 600; font-size: 15px; transition: background 0.2s;
+  }
+  .paper-link a:hover { background: #2e7d32; }
+
+  section { margin-bottom: 40px; }
+  section h2 { font-size: 22px; color: var(--green); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--green-light); }
+
+  .tldr {
+    background: var(--green-light); border-left: 4px solid var(--green);
+    padding: 16px 20px; border-radius: 0 8px 8px 0; margin-bottom: 32px; font-size: 15px;
+  }
+  .tldr strong { color: var(--green); }
+
+  .improvements { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px 24px; transition: box-shadow 0.2s;
+  }
+  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .card h3 { color: var(--green); font-size: 17px; margin-bottom: 8px; }
+  .card .issue { color: #c62828; font-weight: 600; font-size: 13px; text-transform: uppercase; margin-bottom: 4px; }
+  .card .fix { color: var(--green); font-weight: 600; font-size: 13px; text-transform: uppercase; margin-bottom: 4px; }
+  .card p { font-size: 14px; margin-bottom: 8px; }
+  .card .evidence { background: #f5f5f5; padding: 10px 14px; border-radius: 6px; font-size: 13px; }
+
+  .results-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .results-table th { background: var(--green); color: white; padding: 10px 12px; text-align: center; font-weight: 600; }
+  .results-table th:first-child { text-align: left; }
+  .results-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: center; }
+  .results-table td:first-child { text-align: left; font-weight: 600; }
+  .results-table tr:hover td { background: var(--green-light); }
+  .results-table .best { color: var(--green); font-weight: 700; }
+
+  .metric-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px; }
+  .metric-card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; text-align: center;
+  }
+  .metric-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-card .value { font-size: 28px; font-weight: 700; color: var(--green); margin: 4px 0; }
+  .metric-card .detail { font-size: 12px; color: var(--muted); }
+
+  .viewer-promo {
+    background: linear-gradient(135deg, #1b5e20 0%, #388e3c 100%);
+    border-radius: 12px; padding: 32px; color: white; text-align: center; margin: 32px 0;
+  }
+  .viewer-promo h3 { font-size: 20px; margin-bottom: 8px; }
+  .viewer-promo p { opacity: 0.9; margin-bottom: 16px; font-size: 14px; }
+  .viewer-promo a {
+    display: inline-block; background: white; color: var(--green);
+    padding: 12px 28px; border-radius: 6px; text-decoration: none;
+    font-weight: 700; font-size: 15px; transition: transform 0.15s;
+  }
+  .viewer-promo a:hover { transform: translateY(-2px); }
+
+  .math { font-family: 'Times New Roman', 'Georgia', serif; font-style: italic; }
+
+  footer {
+    background: #263238; color: rgba(255,255,255,0.7); padding: 24px;
+    text-align: center; font-size: 13px; margin-top: 48px;
+  }
+  footer a { color: rgba(255,255,255,0.9); }
+
+  @media (min-width: 700px) {
+    .improvements { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Improving Curve Fitting for AI Capability Time Horizons</h1>
+  <p class="subtitle">Three drop-in improvements to METR's methodology &mdash; validated with cross-validation on 18 frontier AI models</p>
+  <div>
+    <span class="badge">Smoothed Isotonic Regression</span>
+    <span class="badge">G[T] Integral Metric</span>
+    <span class="badge">m-out-of-n Bootstrap</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="paper-link">
+    <p>This is the interactive companion to the paper:</p>
+    <a href="https://arxiv.org/abs/[ARXIV-ID]" target="_blank">Read the Paper on arXiv &rarr;</a>
+  </div>
+
+  <div class="tldr">
+    <strong>TL;DR:</strong> METR's headline finding &mdash; AI agent capabilities double roughly every 4 months &mdash; is <strong>robust</strong>.
+    Our improved methodology (smoothed isotonic + G[T] metric) gives a doubling time of <strong>~130 days</strong> with R&sup2; = 0.921, compared to METR's 121 days with R&sup2; = 0.916.
+    The trend is real; our improvements make it more defensible.
+  </div>
+
+  <section>
+    <h2>The Three Improvements</h2>
+    <div class="improvements">
+      <div class="card">
+        <h3>1. Curve Fitting: Smoothed Isotonic Regression</h3>
+        <div class="issue">The issue</div>
+        <p>Logistic regression assumes a symmetric sigmoid. Real success-vs-difficulty curves are often asymmetric: quick saturation on easy tasks, slow decay on hard ones.</p>
+        <div class="fix">The fix</div>
+        <p>Isotonic regression (monotone decreasing) makes no parametric assumption. Smoothed isotonic adds a Gaussian kernel in log<sub>2</sub>-space for continuity.</p>
+        <div class="evidence">
+          <strong>Evidence:</strong> 5-fold CV Brier: <strong>0.1115</strong> (isotonic) vs 0.1212 (logistic) &mdash; 8% improvement.<br>
+          5-fold CV log-loss: <strong>0.363</strong> (smoothed isotonic) vs 0.376 (logistic) &mdash; 3.5% improvement.<br>
+          Both improvements hold <em>out of sample</em>.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>2. Summary Metric: G[T] Integral</h3>
+        <div class="issue">The issue</div>
+        <p>The <span class="math">p</span><sub>50</sub> crossing point is a single-point statistic, extremely sensitive to local curve shape near 50%. For step-function curves it jumps discontinuously.</p>
+        <div class="fix">The fix</div>
+        <p>G[T] = geometric mean capability time. Treats <span class="math">q</span>(<span class="math">u</span>) = 1 &minus; <span class="math">p</span>(<span class="math">u</span>) as a CDF in log<sub>2</sub>-space, computes E[U] via integration, returns 2<sup>E[U]</sup>.</p>
+        <div class="evidence">
+          <strong>Evidence:</strong> G[T] R&sup2;: <strong>0.916&ndash;0.921</strong> across all methods (nearly identical).<br>
+          p<sub>50</sub> R&sup2;: 0.811&ndash;0.916 (swings wildly by method).<br>
+          G[T] uses the entire curve, averaging over regions where all methods agree.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>3. Bootstrap: <span class="math">m</span>-out-of-<span class="math">n</span> Resampling</h3>
+        <div class="issue">The issue</div>
+        <p>Standard bootstrap is inconsistent for isotonic regression, which converges at rate <span class="math">n</span><sup>1/3</sup>, not <span class="math">n</span><sup>1/2</sup>.</p>
+        <div class="fix">The fix</div>
+        <p>Use <span class="math">m</span>-out-of-<span class="math">n</span> bootstrap with <span class="math">m</span> = <span class="math">n</span><sup>2/3</sup>. This restores theoretical consistency for shape-constrained estimators.</p>
+        <div class="evidence">
+          <strong>References:</strong> Kosorok (2008), Sen &amp; Xu (2015), Leger &amp; MacGibbon (2006).
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Results</h2>
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>CV-Brier</th>
+          <th>CV-LogLoss</th>
+          <th>p<sub>50</sub> Doubling</th>
+          <th>p<sub>50</sub> R&sup2;</th>
+          <th>G[T] Doubling</th>
+          <th>G[T] R&sup2;</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Logistic (METR)</td>
+          <td>0.1212</td>
+          <td>0.376</td>
+          <td>121 d</td>
+          <td>0.916</td>
+          <td>128 d</td>
+          <td>0.916</td>
+        </tr>
+        <tr>
+          <td>Isotonic</td>
+          <td class="best">0.1115</td>
+          <td>0.368</td>
+          <td>118 d</td>
+          <td>0.811</td>
+          <td>130 d</td>
+          <td class="best">0.921</td>
+        </tr>
+        <tr>
+          <td>Smoothed Isotonic</td>
+          <td>0.1167</td>
+          <td class="best">0.363</td>
+          <td>121 d</td>
+          <td>0.848</td>
+          <td>130 d</td>
+          <td class="best">0.921</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="metric-cards">
+      <div class="metric-card">
+        <div class="label">Recommended Doubling Time</div>
+        <div class="value">~130 d</div>
+        <div class="detail">Smoothed Isotonic + G[T]</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Best CV Log-Loss</div>
+        <div class="value">0.363</div>
+        <div class="detail">Smoothed Isotonic</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Best CV Brier</div>
+        <div class="value">0.1115</div>
+        <div class="detail">Isotonic</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Models Evaluated</div>
+        <div class="value">18</div>
+        <div class="detail">Mar 2023 &ndash; Dec 2025</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="viewer-promo">
+    <h3>Interactive Viewer</h3>
+    <p>Explore all per-model curve fits, trend charts, comparison tables, and bootstrap confidence bands.</p>
+    <a href="viewer.html">Open Interactive Viewer &rarr;</a>
+  </div>
+
+  <section>
+    <h2>Models Evaluated</h2>
+    <p style="font-size:14px; margin-bottom: 12px;">18 frontier AI models from 4 families, released between March 2023 and December 2025:</p>
+    <table class="results-table" style="font-size:13px;">
+      <thead><tr><th>Model</th><th>Release Date</th><th>G[T] (smoothed iso.)</th></tr></thead>
+      <tbody>
+        <tr><td>GPT-4</td><td>2023-03-14</td><td>3.4 min</td></tr>
+        <tr><td>GPT-4 1106</td><td>2023-11-06</td><td>3.5 min</td></tr>
+        <tr><td>Claude 3 Opus</td><td>2024-03-04</td><td>3.2 min</td></tr>
+        <tr><td>GPT-4 Turbo</td><td>2024-04-09</td><td>3.7 min</td></tr>
+        <tr><td>GPT-4o</td><td>2024-05-13</td><td>6.9 min</td></tr>
+        <tr><td>Claude 3.5 Sonnet</td><td>2024-06-20</td><td>12.1 min</td></tr>
+        <tr><td>o1-preview</td><td>2024-09-12</td><td>18.9 min</td></tr>
+        <tr><td>Claude 3.5 Sonnet (New)</td><td>2024-10-22</td><td>16.9 min</td></tr>
+        <tr><td>o1</td><td>2024-12-05</td><td>35.7 min</td></tr>
+        <tr><td>Claude 3.7 Sonnet</td><td>2025-02-24</td><td>51.6 min</td></tr>
+        <tr><td>o3</td><td>2025-04-16</td><td>1.8 hr</td></tr>
+        <tr><td>Claude 4 Opus</td><td>2025-05-22</td><td>1.4 hr</td></tr>
+        <tr><td>Claude 4.1 Opus</td><td>2025-08-05</td><td>1.4 hr</td></tr>
+        <tr><td>GPT-5</td><td>2025-08-07</td><td>2.6 hr</td></tr>
+        <tr><td>Gemini 3 Pro</td><td>2025-11-18</td><td>3.5 hr</td></tr>
+        <tr><td>GPT-5.1 Codex-Max</td><td>2025-11-19</td><td>2.9 hr</td></tr>
+        <tr><td>Claude Opus 4.5</td><td>2025-11-24</td><td>3.8 hr</td></tr>
+        <tr><td>GPT-5.2</td><td>2025-12-11</td><td>4.4 hr</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Reproduce It Yourself</h2>
+    <div class="card">
+      <p>All code and data are open source. Reproduce the entire analysis in one command:</p>
+      <pre style="background: #263238; color: #e0e0e0; padding: 16px; border-radius: 8px; margin-top: 12px; overflow-x: auto; font-size: 14px;">git clone https://github.com/[USERNAME]/metr-ablation.git
+cd metr-ablation
+pip install -r requirements.txt
+python run.py</pre>
+      <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">Generates all 54 per-model fit plots, 6 trend charts, comparison tables, and the interactive viewer.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Citation</h2>
+    <div class="card">
+      <pre style="background: #f5f5f5; padding: 16px; border-radius: 8px; font-size: 13px; overflow-x: auto; white-space: pre-wrap;">@article{gulyas2026improving,
+  title={Improving Curve Fitting for AI Capability Time Horizons: Three Drop-In Improvements to METR's Methodology},
+  author={Gulyas, Gabor},
+  journal={arXiv preprint arXiv:[ARXIV-ID]},
+  year={2026}
+}</pre>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>
+    <a href="https://arxiv.org/abs/[ARXIV-ID]">Paper (arXiv)</a> &nbsp;|&nbsp;
+    <a href="https://github.com/[USERNAME]/metr-ablation">Source Code</a> &nbsp;|&nbsp;
+    <a href="viewer.html">Interactive Viewer</a>
+  </p>
+  <p style="margin-top: 8px;">Built on data from <a href="https://metr.org/blog/2025-03-19-measuring-ai-agent-time-horizons/">METR Time Horizon Benchmark v1.1</a></p>
+</footer>
+
+</body>
+</html>

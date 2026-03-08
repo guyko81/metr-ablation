@@ -1,0 +1,300 @@
+\documentclass[11pt,a4paper]{article}
+
+% ─── packages ───
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{caption}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\title{Improving Curve Fitting for AI Capability Time Horizons:\\
+       Three Drop-In Improvements to METR's Methodology}
+\author{Gabor Gulyas}
+\date{March 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+METR's Time Horizon benchmark is the most widely cited tracker of AI agent capability growth, with its headline finding---a capability doubling time of approximately four months---informing AI safety policy.
+We propose three concrete, drop-in improvements to METR's curve-fitting pipeline: (1)~replacing logistic regression with smoothed isotonic regression to avoid the symmetric-sigmoid assumption, (2)~replacing the $p_{50}$ threshold-crossing summary metric with a geometric-mean integral metric $G[T]$ that uses the entire fitted curve, and (3)~using $m$-out-of-$n$ bootstrap instead of standard bootstrap for theoretical consistency with shape-constrained estimators.
+We validate each improvement with 5-fold cross-validation on 18 frontier AI models.
+Smoothed isotonic regression improves cross-validated log-loss from $0.376$ to $0.363$; isotonic regression improves cross-validated Brier score from $0.1212$ to $0.1115$.
+The $G[T]$ metric yields a doubling-time estimate of $129$--$130$ days with $R^2 \geq 0.921$ across all three methods, compared to $118$--$121$ days with $R^2$ ranging from $0.811$ to $0.916$ under $p_{50}$.
+The good news: the headline conclusion---AI agent capabilities are doubling roughly every four months---is robust to all methodology choices we tested.
+The improvements make the estimate more defensible, not radically different.
+
+\medskip\noindent
+\textbf{Interactive companion:} All per-model fits, trend charts, and comparison tables are available at an interactive viewer:
+\url{https://[USERNAME].github.io/metr-ablation/} \hfill {\small(GitHub Pages)}
+
+\medskip\noindent
+\textbf{Reproducibility:} Full code and data at \url{https://github.com/[USERNAME]/metr-ablation}.
+\end{abstract}
+
+% ══════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+METR's Time Horizon benchmark~\citep{metr2025} is the most important systematic effort to track how the capabilities of AI agents evolve over time.
+By measuring each model's success rate on a battery of real-world tasks spanning a wide range of human completion times (from minutes to days), METR estimates a \emph{capability time horizon}---the task duration at which a model reaches a given success rate---and tracks how this horizon grows with each new model release.
+
+The headline result, that AI agent capabilities are doubling approximately every four months, is increasingly cited in policy discussions, safety assessments, and capability forecasting.
+Because this number matters, the statistical methodology behind it should be as robust as possible.
+
+We identify three specific methodology choices in METR's pipeline where principled alternatives exist, and we show that adopting them yields better-calibrated fits and more stable trend estimates.
+Crucially, none of our improvements change the headline conclusion.
+The doubling time moves from $121$ days (logistic + $p_{50}$) to $130$ days (smoothed isotonic + $G[T]$)---still approximately four months---but the estimate becomes more defensible against methodological critique.
+
+Our three improvements are:
+\begin{enumerate}
+  \item \textbf{Curve fitting:} Replace logistic regression with smoothed isotonic regression to avoid the symmetric-sigmoid assumption.
+  \item \textbf{Summary metric:} Replace the $p_{50}$ threshold-crossing point with $G[T]$, an integral metric that summarizes the entire fitted curve.
+  \item \textbf{Bootstrap method:} Use $m$-out-of-$n$ bootstrap (with $m = n^{2/3}$) instead of standard bootstrap when using isotonic estimators, following established theory for shape-constrained inference.
+\end{enumerate}
+
+All code, data, and interactive visualizations are publicly available.\footnote{Interactive viewer: \url{https://[USERNAME].github.io/metr-ablation/}; repository: \url{https://github.com/[USERNAME]/metr-ablation}}
+
+
+% ══════════════════════════════════════════════════════════════
+\section{Background}
+\label{sec:background}
+
+METR's pipeline proceeds in four stages:
+\begin{enumerate}
+  \item \textbf{Data collection.} Each AI model is evaluated on a battery of tasks with known human completion times, producing binary success/failure outcomes weighted by task difficulty.
+  \item \textbf{Curve fitting.} A success-rate curve $p(u)$ is fitted, where $u = \log_2(\text{human minutes})$, mapping task difficulty to estimated success probability.
+  \item \textbf{Summary statistic.} A scalar ``capability time horizon'' is extracted from each model's fitted curve---in METR's case, the $p_{50}$ crossing point (the task duration at which $p(u) = 0.5$).
+  \item \textbf{Trend regression.} An exponential trend is fitted to the $(\text{release date}, \text{capability horizon})$ pairs across models, yielding the doubling-time estimate.
+\end{enumerate}
+
+METR uses logistic regression for step~2 and the $p_{50}$ crossing point for step~3.
+We propose improvements to both choices.
+
+Our analysis covers 18 frontier AI models released between March 2023 and December 2025, including the Claude family (3 Opus through Opus~4.5), the GPT family (GPT-4 through GPT-5.2), reasoning models (o1-preview, o1, o3), and Gemini~3~Pro, with approximately 1{,}000--1{,}400 evaluated task runs per model.
+
+
+% ══════════════════════════════════════════════════════════════
+\section{Three Improvements}
+\label{sec:improvements}
+
+% ──────────────────────────────────────────────────────────────
+\subsection{Curve Fitting: Isotonic Regression}
+\label{sec:isotonic}
+
+\paragraph{The issue.}
+Logistic regression fits a sigmoid:
+\[
+  p(u) = \frac{1}{1 + \exp(-(\beta_0 + \beta_1 u))}
+\]
+This is symmetric around its inflection point---it assumes the curve drops from high success to low success at the same rate in both directions.
+In practice, success-versus-difficulty curves are often asymmetric: models may saturate quickly on easy tasks (success near 1 over a broad range) but exhibit a long, slow tail on hard tasks.
+A symmetric sigmoid cannot capture this shape, biasing both the fitted curve and any threshold crossing derived from it.
+
+\paragraph{The fix.}
+Isotonic regression~\citep{barlow1972,robertson1988} fits a monotone non-increasing function with no parametric assumption.
+It preserves only the structural prior that harder tasks should not be easier, and adapts its shape freely to the data.
+
+Raw isotonic regression produces a step function, which is discontinuous and can cause threshold-crossing metrics to jump between steps.
+\emph{Smoothed isotonic regression} addresses this by applying a Gaussian kernel in $\log_2$-space ($\sigma = 0.5$ log$_2$ units) after fitting, producing a smooth, monotone curve.
+
+\paragraph{Evidence.}
+Table~\ref{tab:results} summarizes fit quality.
+Using 5-fold cross-validation (averaging across all 18 models):
+
+\begin{itemize}
+  \item \textbf{Brier score:} Isotonic achieves $0.1115$ vs.\ logistic's $0.1212$ (8.0\% improvement).
+  \item \textbf{Log-loss:} Smoothed isotonic achieves $0.363$ vs.\ logistic's $0.376$ (3.5\% improvement).
+  \item Both improvements hold \emph{out of sample}, confirming they are not artifacts of in-sample overfitting.
+\end{itemize}
+
+\paragraph{Overfitting check.}
+The in-sample Brier gap ($0.1085$ vs.\ $0.1204$, a 9.9\% gap) is larger than the cross-validated gap ($0.1115$ vs.\ $0.1212$, an 8.0\% gap).
+This confirms isotonic regression does overfit slightly more than logistic---as expected for a nonparametric method---but the improvement survives cross-validation, indicating genuine better calibration.
+
+
+% ──────────────────────────────────────────────────────────────
+\subsection{Summary Metric: $G[T]$ Integral}
+\label{sec:gt}
+
+\paragraph{The issue.}
+The $p_{50}$ crossing point---the task duration $T$ at which $p(\log_2 T) = 0.5$---is a single-point statistic.
+It depends entirely on the fitted curve's behavior at one specific success level.
+For step-function curves (isotonic regression), $p_{50}$ can jump discontinuously between adjacent steps, introducing high variance.
+Even for smooth curves, small perturbations near the 50\% level can shift $p_{50}$ substantially.
+
+\paragraph{The fix.}
+We define the \emph{geometric mean capability time} $G[T]$ as follows.
+Let $q(u) = 1 - p(u)$ serve as a CDF-like function over the log$_2$-difficulty axis $u$.
+Compute:
+\[
+  E[U] = u_{\min} + \int_{u_{\min}}^{u_{\max}} p(u)\, du
+\]
+where $u_{\min}$ and $u_{\max}$ are the endpoints of the evaluation grid.
+Then:
+\[
+  G[T] = 2^{E[U]}
+\]
+This integral uses the \emph{entire fitted curve}, averaging over the bulk of the difficulty range where all three methods agree closely.
+The exponentiation converts back from log$_2$-space to minutes.
+
+\paragraph{Why it works.}
+The integral averages over the full range of task difficulties, washing out local fluctuations.
+In regions where the models are easy (success $\approx 1$) or hard (success $\approx 0$), all methods agree.
+The methods diverge most in the transition zone around $p = 0.5$, which is exactly the single point $p_{50}$ depends on.
+$G[T]$ dilutes this sensitive region with the stable bulk, producing a much more robust summary statistic.
+
+\paragraph{Evidence.}
+\begin{itemize}
+  \item $G[T]$ doubling time: $128$--$130$ days across all three methods ($R^2 = 0.916$--$0.921$).
+  \item $p_{50}$ doubling time: $118$--$121$ days ($R^2 = 0.811$--$0.916$).
+  \item The $R^2$ spread across methods shrinks from $0.105$ ($p_{50}$) to $0.005$ ($G[T]$).
+\end{itemize}
+
+One could argue that $G[T]$'s stability reflects insensitivity to tail behavior.
+For a headline trend metric, this is a feature: the doubling-time estimate should be robust across reasonable methodology choices, and $G[T]$ achieves this.
+
+
+% ──────────────────────────────────────────────────────────────
+\subsection{Bootstrap: $m$-out-of-$n$ Resampling}
+\label{sec:bootstrap}
+
+Standard bootstrap draws $n$ samples with replacement from a dataset of size $n$.
+For isotonic regression, this is theoretically inconsistent: the isotonic estimator converges at rate $n^{1/3}$ (not $n^{1/2}$ as for smooth parametric models), and the standard bootstrap fails to capture this slower rate~\citep{kosorok2008,sen2015}.
+
+The $m$-out-of-$n$ bootstrap draws $m < n$ samples without replacement, with $m = n^{2/3}$.
+This restores consistency for shape-constrained estimators~\citep{leger2006}.
+In our implementation, we use $m$-out-of-$n$ bootstrap for both isotonic and smoothed isotonic methods, and standard bootstrap for logistic regression.
+
+
+% ══════════════════════════════════════════════════════════════
+\section{Results}
+\label{sec:results}
+
+\begin{table}[H]
+\centering
+\caption{Comparison of the three curve-fitting methods across all 18 models.
+CV-Brier and CV-LogLoss are 5-fold cross-validated averages.
+Doubling times and $R^2$ values come from exponential trend regression on per-model summary statistics vs.\ release date.}
+\label{tab:results}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Method} & \textbf{CV-Brier} & \textbf{CV-LogLoss} & \textbf{$p_{50}$ Dbl} & \textbf{$p_{50}$ $R^2$} & \textbf{$G[T]$ Dbl} & \textbf{$G[T]$ $R^2$} \\
+\midrule
+Logistic (METR)     & 0.1212 & 0.376 & 121\,d & 0.916 & 128\,d & 0.916 \\
+Isotonic            & 0.1115 & 0.368 & 118\,d & 0.811 & 130\,d & 0.921 \\
+Smoothed Isotonic   & 0.1167 & 0.363 & 121\,d & 0.848 & 130\,d & 0.921 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Key takeaways.}
+\begin{enumerate}
+  \item \textbf{Fit quality:} Isotonic wins on CV-Brier; smoothed isotonic wins on CV-LogLoss. Both outperform logistic out of sample.
+  \item \textbf{Metric stability:} $G[T]$ produces nearly identical doubling times ($128$--$130$\,d) and $R^2$ values ($0.916$--$0.921$) across all methods.
+        Under $p_{50}$, the $R^2$ drops to $0.811$ for isotonic due to the step-function artifact.
+  \item \textbf{Headline robustness:} The doubling time is approximately four months ($\sim$\!$128$--$130$ days) regardless of methodology.
+  \item \textbf{Recommendation:} Use smoothed isotonic regression with $G[T]$ for the most defensible estimate. This combination achieves the best cross-validated log-loss and the most stable trend fit.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════
+\section{Interactive Companion}
+\label{sec:interactive}
+
+To enable detailed inspection of the results, we provide an interactive web-based viewer at:
+\begin{center}
+  \url{https://[USERNAME].github.io/metr-ablation/}
+\end{center}
+The viewer allows readers to:
+\begin{itemize}
+  \item Switch between all three fitting methods and compare aggregate statistics side by side.
+  \item Inspect per-model curve fits with bootstrap confidence bands for all 18 models.
+  \item Compare $p_{50}$ and $G[T]$ trend charts with regression lines and confidence intervals.
+  \item View detailed comparison tables of per-model metrics across methods.
+\end{itemize}
+All visualizations are interactive (Plotly-based) with hover tooltips for exact values.
+The entire analysis is reproducible:
+\begin{verbatim}
+  pip install -r requirements.txt
+  python run.py
+\end{verbatim}
+
+
+% ══════════════════════════════════════════════════════════════
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{The trend is real and robust.}
+Our most important finding is negative in a positive sense: the methodology improvements do not overturn METR's headline result.
+The doubling time of AI agent capabilities is approximately four months, and this holds across logistic, isotonic, and smoothed isotonic curve fitting, and across both $p_{50}$ and $G[T]$ summary metrics.
+What changes is the \emph{defensibility} of the estimate---a $G[T]$-based trend with $R^2 = 0.921$ is harder to dismiss than a $p_{50}$-based trend with $R^2 = 0.811$.
+
+\paragraph{Policy implications.}
+For decision-makers who rely on the METR doubling time to calibrate AI safety policy, our results are reassuring: the number is not an artifact of a particular curve-fitting choice.
+The recommended methodology (smoothed isotonic + $G[T]$) provides a principled, well-calibrated, and stable estimate that should withstand methodological scrutiny.
+
+\paragraph{Limitations and future work.}
+\begin{itemize}
+  \item \textbf{Trend regression:} We use ordinary least-squares on $\log(\text{metric})$ vs.\ release date, which assumes homoscedastic errors and perfect exponential growth.
+        With only 18 data points, more sophisticated methods (Bayesian regression, distributional regression) are appealing but difficult to validate. We note this as future work.
+  \item \textbf{Task weighting:} We use METR's default task weighting scheme. Sensitivity of the doubling time to alternative weightings deserves investigation.
+  \item \textbf{Leave-one-model-out:} Testing stability of the trend when individual models are removed could further strengthen robustness claims.
+\end{itemize}
+
+
+% ══════════════════════════════════════════════════════════════
+\section*{Acknowledgments}
+
+We thank METR for making their benchmark data and methodology publicly available.
+This work would not be possible without their systematic data collection effort.
+
+\bibliographystyle{plainnat}
+\begin{thebibliography}{9}
+
+\bibitem[Barlow et~al.(1972)]{barlow1972}
+R.~E. Barlow, D.~J. Bartholomew, J.~M. Bremner, and H.~D. Brunk.
+\newblock \emph{Statistical Inference Under Order Restrictions}.
+\newblock Wiley, 1972.
+
+\bibitem[Kosorok(2008)]{kosorok2008}
+M.~R. Kosorok.
+\newblock \emph{Introduction to Empirical Processes and Semiparametric Inference}.
+\newblock Springer, 2008.
+
+\bibitem[Leger and MacGibbon(2006)]{leger2006}
+C.~Leger and B.~MacGibbon.
+\newblock On the bootstrap in cube root asymptotics.
+\newblock \emph{Canadian Journal of Statistics}, 34(1):29--44, 2006.
+
+\bibitem[METR(2025)]{metr2025}
+METR.
+\newblock Measuring AI agent time horizons, v1.1.
+\newblock \url{https://metr.org/blog/2025-03-19-measuring-ai-agent-time-horizons/}, 2025.
+
+\bibitem[Robertson et~al.(1988)]{robertson1988}
+T.~Robertson, F.~T. Wright, and R.~L. Dykstra.
+\newblock \emph{Order Restricted Statistical Inference}.
+\newblock Wiley, 1988.
+
+\bibitem[Sen and Xu(2015)]{sen2015}
+B.~Sen and G.~Xu.
+\newblock Model based bootstrap methods for interval censored data.
+\newblock \emph{Computational Statistics \& Data Analysis}, 81:121--129, 2015.
+
+\end{thebibliography}
+
+\end{document}

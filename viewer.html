@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ablation v2: Logistic vs Isotonic vs Smoothed Isotonic</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+
+  header { background: #1b5e20; color: white; padding: 16px 24px; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header p { font-size: 12px; opacity: 0.85; margin-top: 4px; }
+
+  .method-bar { background: #fff; border-bottom: 1px solid #ddd; padding: 12px 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 100; }
+  .method-bar label { font-weight: 600; margin-right: 8px; font-size: 14px; }
+  .method-btn {
+    padding: 8px 16px; border: 2px solid #1b5e20; border-radius: 6px;
+    background: #fff; color: #1b5e20; cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: all 0.15s;
+  }
+  .method-btn:hover { background: #e8f5e9; }
+  .method-btn.active { background: #1b5e20; color: #fff; }
+
+  .stats-row { display: flex; gap: 12px; padding: 12px 24px; flex-wrap: wrap; }
+  .stat-card { background: #fff; border-radius: 8px; padding: 10px 16px; border: 1px solid #ddd; min-width: 140px; }
+  .stat-card .label { font-size: 11px; color: #666; text-transform: uppercase; }
+  .stat-card .value { font-size: 18px; font-weight: 700; color: #1b5e20; }
+  .stat-card .sub { font-size: 11px; color: #888; }
+  .stat-card.warn .value { color: #c62828; }
+
+  .section-title { padding: 16px 24px 8px; font-size: 18px; font-weight: 600; }
+  .section-desc { padding: 0 24px 12px; font-size: 13px; color: #666; }
+
+  .metr-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 0 24px 16px;
+  }
+  .metr-cell {
+    background: #fff; border-radius: 8px; border: 1px solid #ddd; overflow: hidden; position: relative;
+  }
+  .metr-cell .cell-label {
+    position: absolute; top: 4px; left: 6px; z-index: 10;
+    background: rgba(27,94,32,0.9); color: white; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .metr-cell .cell-stats {
+    position: absolute; top: 4px; right: 6px; z-index: 10;
+    background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px;
+  }
+  .iframe-wrap {
+    width: 100%; overflow: hidden;
+    aspect-ratio: 1100 / 650;
+  }
+  .iframe-wrap iframe {
+    border: none;
+    transform-origin: 0 0;
+    width: 1100px; height: 650px;
+  }
+
+  .models-section { padding: 0 24px 24px; }
+  .model-row {
+    background: #fff; border-radius: 8px; border: 1px solid #ddd;
+    margin-bottom: 8px; overflow: hidden;
+  }
+  .model-row-header {
+    padding: 10px 16px; font-weight: 600; font-size: 15px;
+    background: #f9f9f9; border-bottom: 1px solid #eee; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .model-row-header:hover { background: #f0f0f0; }
+  .model-row-body { }
+  .model-row-body .iframe-wrap { height: 500px; }
+  .model-row-body .iframe-wrap iframe { width: 1100px; height: 605px; }
+  .model-row.collapsed .model-row-body { display: none; }
+
+  .expand-controls { padding: 0 24px 8px; display: flex; gap: 8px; }
+  .expand-btn {
+    padding: 4px 12px; border: 1px solid #aaa; border-radius: 4px;
+    background: #fff; cursor: pointer; font-size: 12px;
+  }
+  .expand-btn:hover { background: #eee; }
+
+  .tables-section { padding: 0 24px 16px; }
+  .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .table-wrap { overflow-x: auto; }
+  .table-wrap h3 { font-size: 14px; margin-bottom: 6px; color: #1b5e20; }
+  .cmp-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .cmp-table th, .cmp-table td { padding: 4px 8px; border: 1px solid #ddd; text-align: right; white-space: nowrap; }
+  .cmp-table th { background: #1b5e20; color: white; font-weight: 600; position: sticky; top: 0; }
+  .cmp-table th:first-child { text-align: left; }
+  .cmp-table td:first-child { text-align: left; font-weight: 600; background: #f9f9f9; }
+  .cmp-table tr:hover td { background: #e8f5e9; }
+  .cmp-table .ci { font-size: 10px; color: #888; display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ablation v2: Logistic vs Isotonic vs Smoothed Isotonic</h1>
+  <p>K-fold cross-validated fit quality | m-out-of-n bootstrap for isotonic | G[T] integral metric</p>
+</header>
+
+<div class="method-bar" id="methodBar">
+  <label>Fit Method:</label>
+</div>
+
+<div class="stats-row" id="statsRow"></div>
+
+<div class="section-title">METR Trend Charts</div>
+<div class="section-desc" id="fitDescription"></div>
+<div class="metr-grid" id="metrGrid"></div>
+
+<div class="section-title">Model Comparison Tables</div>
+<div class="tables-section">
+  <div class="tables-grid">
+    <div class="table-wrap"><h3>P50 Threshold Crossing (minutes)</h3><div id="p50Table"></div></div>
+    <div class="table-wrap"><h3>G[T] Geometric Mean (minutes)</h3><div id="gtTable"></div></div>
+  </div>
+</div>
+
+<div class="section-title">Per-Model Fits</div>
+<div class="expand-controls">
+  <button class="expand-btn" onclick="toggleAll(true)">Expand All</button>
+  <button class="expand-btn" onclick="toggleAll(false)">Collapse All</button>
+</div>
+<div class="models-section" id="modelsSection"></div>
+
+<script>
+const D = {
+  "fits": {
+    "logistic": {
+      "model_name": "logistic",
+      "bootstrap_type": "standard",
+      "fit_quality": {
+        "avg_cv_brier": 0.121239,
+        "avg_cv_log_loss": 0.376212,
+        "avg_insample_brier": 0.120438
+      },
+      "trends": {
+        "p50": {
+          "doubling_time_days": 121.1,
+          "r_squared": 0.9157
+        },
+        "G[T]": {
+          "doubling_time_days": 128.0,
+          "r_squared": 0.9162
+        }
+      },
+      "description": "Logistic regression (METR default, C=10)"
+    },
+    "isotonic": {
+      "model_name": "isotonic",
+      "bootstrap_type": "m_out_of_n",
+      "fit_quality": {
+        "avg_cv_brier": 0.111527,
+        "avg_cv_log_loss": 0.368351,
+        "avg_insample_brier": 0.108523
+      },
+      "trends": {
+        "p50": {
+          "doubling_time_days": 118.4,
+          "r_squared": 0.8113
+        },
+        "G[T]": {
+          "doubling_time_days": 129.5,
+          "r_squared": 0.9212
+        }
+      },
+      "description": "Isotonic regression (decreasing, weighted)"
+    },
+    "smoothed_isotonic": {
+      "model_name": "smoothed_isotonic",
+      "bootstrap_type": "m_out_of_n",
+      "fit_quality": {
+        "avg_cv_brier": 0.116707,
+        "avg_cv_log_loss": 0.363368,
+        "avg_insample_brier": 0.11473
+      },
+      "trends": {
+        "p50": {
+          "doubling_time_days": 121.2,
+          "r_squared": 0.8481
+        },
+        "G[T]": {
+          "doubling_time_days": 129.5,
+          "r_squared": 0.9212
+        }
+      },
+      "description": "Smoothed isotonic (sigma=0.5 in log2 space)"
+    }
+  },
+  "fit_ids": [
+    "logistic",
+    "isotonic",
+    "smoothed_isotonic"
+  ],
+  "fit_labels": {
+    "logistic": "Logistic",
+    "isotonic": "Isotonic",
+    "smoothed_isotonic": "Smoothed Isotonic"
+  },
+  "models": [
+    [
+      "Claude 3 Opus (Inspect)",
+      "Claude 3 Opus",
+      "2024-03-04"
+    ],
+    [
+      "Claude 3.5 Sonnet (New) (Inspect)",
+      "Claude 3.5 Sonnet (New)",
+      "2024-10-22"
+    ],
+    [
+      "Claude 3.5 Sonnet (Old) (Inspect)",
+      "Claude 3.5 Sonnet",
+      "2024-06-20"
+    ],
+    [
+      "Claude 3.7 Sonnet (Inspect)",
+      "Claude 3.7 Sonnet",
+      "2025-02-24"
+    ],
+    [
+      "Claude 4 Opus (Inspect)",
+      "Claude 4 Opus",
+      "2025-05-22"
+    ],
+    [
+      "Claude 4.1 Opus (Inspect)",
+      "Claude 4.1 Opus",
+      "2025-08-05"
+    ],
+    [
+      "Claude Opus 4.5 (Inspect)",
+      "Claude Opus 4.5",
+      "2025-11-24"
+    ],
+    [
+      "GPT-4 0314",
+      "GPT-4",
+      "2023-03-14"
+    ],
+    [
+      "GPT-4 1106 (Inspect)",
+      "GPT-4 Turbo",
+      "2023-11-06"
+    ],
+    [
+      "GPT-4 Turbo (Inspect)",
+      "GPT-4 Turbo (Apr)",
+      "2024-04-09"
+    ],
+    [
+      "GPT-4o (Inspect)",
+      "GPT-4o",
+      "2024-05-13"
+    ],
+    [
+      "GPT-5 (Inspect)",
+      "GPT-5",
+      "2025-08-07"
+    ],
+    [
+      "GPT-5.1-Codex-Max (Inspect)",
+      "GPT-5.1 Codex",
+      "2025-11-19"
+    ],
+    [
+      "GPT-5.2",
+      "GPT-5.2",
+      "2025-12-11"
+    ],
+    [
+      "Gemini 3 Pro",
+      "Gemini 3 Pro",
+      "2025-11-18"
+    ],
+    [
+      "o1 (Inspect)",
+      "o1",
+      "2024-12-05"
+    ],
+    [
+      "o1-preview",
+      "o1-preview",
+      "2024-09-12"
+    ],
+    [
+      "o3 (Inspect)",
+      "o3",
+      "2025-04-16"
+    ]
+  ],
+  "safe_names": [
+    "Claude_3_Opus_Inspect",
+    "Claude_3_5_Sonnet_New_Inspect",
+    "Claude_3_5_Sonnet_Old_Inspect",
+    "Claude_3_7_Sonnet_Inspect",
+    "Claude_4_Opus_Inspect",
+    "Claude_4_1_Opus_Inspect",
+    "Claude_Opus_4_5_Inspect",
+    "GPT-4_0314",
+    "GPT-4_1106_Inspect",
+    "GPT-4_Turbo_Inspect",
+    "GPT-4o_Inspect",
+    "GPT-5_Inspect",
+    "GPT-5_1-Codex-Max_Inspect",
+    "GPT-5_2",
+    "Gemini_3_Pro",
+    "o1_Inspect",
+    "o1-preview",
+    "o3_Inspect"
+  ],
+  "p50": {
+    "logistic": {
+      "Claude 3 Opus (Inspect)": [
+        3.58,
+        2.8,
+        4.67
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        19.78,
+        15.26,
+        25.2
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        10.77,
+        8.52,
+        13.36
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        59.76,
+        48.09,
+        73.53
+      ],
+      "Claude 4 Opus (Inspect)": [
+        101.18,
+        85.64,
+        122.52
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        100.84,
+        83.0,
+        124.0
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        320.42,
+        237.31,
+        440.08
+      ],
+      "GPT-4 0314": [
+        3.52,
+        2.85,
+        4.31
+      ],
+      "GPT-4 1106 (Inspect)": [
+        3.61,
+        2.93,
+        4.61
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.23,
+        2.57,
+        4.14
+      ],
+      "GPT-4o (Inspect)": [
+        6.4,
+        5.23,
+        8.1
+      ],
+      "GPT-5 (Inspect)": [
+        213.95,
+        163.04,
+        279.12
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        236.55,
+        200.39,
+        297.98
+      ],
+      "GPT-5.2": [
+        394.38,
+        296.49,
+        547.51
+      ],
+      "Gemini 3 Pro": [
+        236.65,
+        185.51,
+        297.49
+      ],
+      "o1 (Inspect)": [
+        37.94,
+        30.49,
+        47.27
+      ],
+      "o1-preview": [
+        19.4,
+        16.98,
+        22.71
+      ],
+      "o3 (Inspect)": [
+        120.73,
+        98.55,
+        145.03
+      ]
+    },
+    "isotonic": {
+      "Claude 3 Opus (Inspect)": [
+        0.95,
+        0.3,
+        16.04
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        46.27,
+        5.12,
+        92.26
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        22.8,
+        2.12,
+        48.91
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        110.18,
+        36.38,
+        133.55
+      ],
+      "Claude 4 Opus (Inspect)": [
+        100.61,
+        49.73,
+        377.11
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        108.96,
+        50.93,
+        358.67
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        118.85,
+        86.77,
+        629.84
+      ],
+      "GPT-4 0314": [
+        1.01,
+        0.83,
+        15.05
+      ],
+      "GPT-4 1106 (Inspect)": [
+        1.0,
+        0.72,
+        15.19
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.45,
+        0.9,
+        13.24
+      ],
+      "GPT-4o (Inspect)": [
+        2.7,
+        1.07,
+        22.85
+      ],
+      "GPT-5 (Inspect)": [
+        103.54,
+        61.52,
+        516.85
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        105.79,
+        49.74,
+        496.9
+      ],
+      "GPT-5.2": [
+        111.16,
+        100.57,
+        790.69
+      ],
+      "Gemini 3 Pro": [
+        117.09,
+        85.04,
+        465.98
+      ],
+      "o1 (Inspect)": [
+        50.82,
+        21.29,
+        107.96
+      ],
+      "o1-preview": [
+        49.24,
+        9.33,
+        53.87
+      ],
+      "o3 (Inspect)": [
+        100.66,
+        50.67,
+        380.35
+      ]
+    },
+    "smoothed_isotonic": {
+      "Claude 3 Opus (Inspect)": [
+        1.16,
+        0.48,
+        13.59
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        39.51,
+        6.18,
+        70.7
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        17.46,
+        2.83,
+        37.79
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        79.76,
+        39.24,
+        136.83
+      ],
+      "Claude 4 Opus (Inspect)": [
+        93.27,
+        53.3,
+        265.96
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        88.38,
+        55.98,
+        248.15
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        177.01,
+        97.94,
+        564.74
+      ],
+      "GPT-4 0314": [
+        2.1,
+        0.88,
+        12.08
+      ],
+      "GPT-4 1106 (Inspect)": [
+        1.39,
+        0.74,
+        12.34
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.06,
+        1.05,
+        9.39
+      ],
+      "GPT-4o (Inspect)": [
+        3.84,
+        1.38,
+        19.1
+      ],
+      "GPT-5 (Inspect)": [
+        111.72,
+        72.04,
+        469.89
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        126.04,
+        68.32,
+        422.01
+      ],
+      "GPT-5.2": [
+        225.44,
+        102.21,
+        616.61
+      ],
+      "Gemini 3 Pro": [
+        140.13,
+        88.47,
+        383.34
+      ],
+      "o1 (Inspect)": [
+        62.41,
+        26.91,
+        105.58
+      ],
+      "o1-preview": [
+        37.16,
+        12.16,
+        50.59
+      ],
+      "o3 (Inspect)": [
+        94.02,
+        58.38,
+        284.76
+      ]
+    }
+  },
+  "gt": {
+    "logistic": {
+      "Claude 3 Opus (Inspect)": [
+        3.63,
+        2.87,
+        4.69
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        18.63,
+        14.66,
+        23.46
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        10.54,
+        8.39,
+        13.02
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        55.76,
+        45.12,
+        67.44
+      ],
+      "Claude 4 Opus (Inspect)": [
+        91.23,
+        78.05,
+        107.13
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        93.06,
+        77.28,
+        113.45
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        232.38,
+        184.67,
+        277.87
+      ],
+      "GPT-4 0314": [
+        3.55,
+        2.88,
+        4.33
+      ],
+      "GPT-4 1106 (Inspect)": [
+        3.65,
+        2.98,
+        4.64
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.25,
+        2.6,
+        4.16
+      ],
+      "GPT-4o (Inspect)": [
+        6.39,
+        5.26,
+        8.05
+      ],
+      "GPT-5 (Inspect)": [
+        173.36,
+        138.07,
+        207.69
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        197.76,
+        172.09,
+        234.78
+      ],
+      "GPT-5.2": [
+        281.6,
+        230.04,
+        343.81
+      ],
+      "Gemini 3 Pro": [
+        200.98,
+        164.59,
+        238.32
+      ],
+      "o1 (Inspect)": [
+        35.84,
+        28.5,
+        44.3
+      ],
+      "o1-preview": [
+        18.98,
+        16.64,
+        22.1
+      ],
+      "o3 (Inspect)": [
+        111.18,
+        91.67,
+        132.9
+      ]
+    },
+    "isotonic": {
+      "Claude 3 Opus (Inspect)": [
+        3.23,
+        1.84,
+        8.42
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        16.92,
+        9.35,
+        40.53
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        12.08,
+        6.65,
+        25.35
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        51.58,
+        28.47,
+        103.01
+      ],
+      "Claude 4 Opus (Inspect)": [
+        86.66,
+        52.18,
+        153.21
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        86.22,
+        53.07,
+        161.2
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        230.44,
+        115.59,
+        402.92
+      ],
+      "GPT-4 0314": [
+        3.37,
+        1.92,
+        7.46
+      ],
+      "GPT-4 1106 (Inspect)": [
+        3.5,
+        1.8,
+        8.68
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.67,
+        2.12,
+        8.06
+      ],
+      "GPT-4o (Inspect)": [
+        6.94,
+        3.88,
+        14.19
+      ],
+      "GPT-5 (Inspect)": [
+        155.77,
+        86.21,
+        274.29
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        174.07,
+        119.17,
+        269.41
+      ],
+      "GPT-5.2": [
+        264.69,
+        145.46,
+        482.69
+      ],
+      "Gemini 3 Pro": [
+        212.31,
+        117.93,
+        384.29
+      ],
+      "o1 (Inspect)": [
+        35.68,
+        19.75,
+        69.88
+      ],
+      "o1-preview": [
+        18.88,
+        12.39,
+        33.65
+      ],
+      "o3 (Inspect)": [
+        106.46,
+        62.7,
+        207.51
+      ]
+    },
+    "smoothed_isotonic": {
+      "Claude 3 Opus (Inspect)": [
+        3.23,
+        1.84,
+        8.42
+      ],
+      "Claude 3.5 Sonnet (New) (Inspect)": [
+        16.91,
+        9.36,
+        40.61
+      ],
+      "Claude 3.5 Sonnet (Old) (Inspect)": [
+        12.12,
+        6.65,
+        25.36
+      ],
+      "Claude 3.7 Sonnet (Inspect)": [
+        51.59,
+        28.48,
+        103.04
+      ],
+      "Claude 4 Opus (Inspect)": [
+        86.64,
+        52.21,
+        153.27
+      ],
+      "Claude 4.1 Opus (Inspect)": [
+        86.26,
+        53.07,
+        161.46
+      ],
+      "Claude Opus 4.5 (Inspect)": [
+        230.41,
+        118.1,
+        408.94
+      ],
+      "GPT-4 0314": [
+        3.36,
+        1.92,
+        7.45
+      ],
+      "GPT-4 1106 (Inspect)": [
+        3.5,
+        1.79,
+        8.68
+      ],
+      "GPT-4 Turbo (Inspect)": [
+        3.67,
+        2.12,
+        8.07
+      ],
+      "GPT-4o (Inspect)": [
+        6.94,
+        3.88,
+        14.2
+      ],
+      "GPT-5 (Inspect)": [
+        155.65,
+        87.19,
+        273.79
+      ],
+      "GPT-5.1-Codex-Max (Inspect)": [
+        174.04,
+        121.76,
+        274.2
+      ],
+      "GPT-5.2": [
+        264.77,
+        145.94,
+        487.7
+      ],
+      "Gemini 3 Pro": [
+        212.34,
+        118.1,
+        384.31
+      ],
+      "o1 (Inspect)": [
+        35.68,
+        19.75,
+        69.85
+      ],
+      "o1-preview": [
+        18.89,
+        12.39,
+        33.65
+      ],
+      "o3 (Inspect)": [
+        106.38,
+        62.69,
+        207.48
+      ]
+    }
+  },
+  "p50_trend": {
+    "logistic": [
+      121.1,
+      0.9157
+    ],
+    "isotonic": [
+      118.4,
+      0.8113
+    ],
+    "smoothed_isotonic": [
+      121.2,
+      0.8481
+    ]
+  },
+  "gt_trend": {
+    "logistic": [
+      128.0,
+      0.9162
+    ],
+    "isotonic": [
+      129.5,
+      0.9212
+    ],
+    "smoothed_isotonic": [
+      129.5,
+      0.9212
+    ]
+  }
+};
+
+let currentFit = null;
+
+function selectFit(fitId) {
+  currentFit = fitId;
+  document.querySelectorAll('.method-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.fitId === fitId);
+  });
+  renderStats();
+  renderMetrGrid();
+  renderModels();
+  requestAnimationFrame(scaleIframes);
+}
+
+function renderStats() {
+  const f = D.fits[currentFit];
+  const q = f.fit_quality;
+  const tp = f.trends.p50;
+  const tg = f.trends["G[T]"];
+  const bt = f.bootstrap_type;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="label">Avg CV-Brier</div><div class="value">${q.avg_cv_brier.toFixed(4)}</div><div class="sub">5-fold cross-validated</div></div>
+    <div class="stat-card"><div class="label">Avg CV-LogLoss</div><div class="value">${q.avg_cv_log_loss.toFixed(3)}</div><div class="sub">5-fold cross-validated</div></div>
+    <div class="stat-card"><div class="label">Avg InSample Brier</div><div class="value">${q.avg_insample_brier.toFixed(4)}</div><div class="sub">for reference only</div></div>
+    <div class="stat-card"><div class="label">Doubling (G[T])</div><div class="value">${tg.doubling_time_days}d</div><div class="sub">R&sup2; = ${tg.r_squared.toFixed(4)}</div></div>
+    <div class="stat-card"><div class="label">Doubling (p50)</div><div class="value">${tp.doubling_time_days}d</div><div class="sub">R&sup2; = ${tp.r_squared.toFixed(4)}</div></div>
+    <div class="stat-card"><div class="label">Bootstrap</div><div class="value">${bt === 'm_out_of_n' ? 'm-of-n' : 'standard'}</div><div class="sub">${bt === 'm_out_of_n' ? 'consistent for isotonic' : 'n-from-n'}</div></div>
+  `;
+  document.getElementById('fitDescription').textContent = f.description;
+}
+
+function renderMetrGrid() {
+  const dir = currentFit;
+  const tp = D.fits[currentFit].trends.p50;
+  const tg = D.fits[currentFit].trends["G[T]"];
+  document.getElementById('metrGrid').innerHTML = `
+    <div class="metr-cell">
+      <div class="cell-label">P50 Threshold</div>
+      <div class="cell-stats">${tp.doubling_time_days}d | R&sup2;=${tp.r_squared.toFixed(3)}</div>
+      <div class="iframe-wrap"><iframe src="${dir}/metr_trend_p50.html" loading="lazy"></iframe></div>
+    </div>
+    <div class="metr-cell">
+      <div class="cell-label">G[T] Geometric Mean</div>
+      <div class="cell-stats">${tg.doubling_time_days}d | R&sup2;=${tg.r_squared.toFixed(3)}</div>
+      <div class="iframe-wrap"><iframe src="${dir}/metr_trend_GT.html" loading="lazy"></iframe></div>
+    </div>
+  `;
+}
+
+function renderModels() {
+  const dir = currentFit;
+  let html = '';
+  for (let i = 0; i < D.models.length; i++) {
+    const [alias, short, date] = D.models[i];
+    const safe = D.safe_names[i];
+    html += `<div class="model-row collapsed" id="row-${i}">
+      <div class="model-row-header" onclick="toggleModel(${i})">
+        <span>${short} <span style="font-weight:normal;color:#888;font-size:12px">(${date})</span></span>
+        <span class="toggle" style="font-size:12px;color:#888">Click to expand</span>
+      </div>
+      <div class="model-row-body">
+        <div class="iframe-wrap"><iframe src="${dir}/per_model/${safe}_fit.html" loading="lazy"></iframe></div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('modelsSection').innerHTML = html;
+}
+
+function toggleModel(i) {
+  const row = document.getElementById('row-' + i);
+  const collapsed = row.classList.toggle('collapsed');
+  row.querySelector('.toggle').textContent = collapsed ? 'Click to expand' : 'Click to collapse';
+  if (!collapsed) requestAnimationFrame(scaleIframes);
+}
+
+function toggleAll(expand) {
+  for (let i = 0; i < D.models.length; i++) {
+    const row = document.getElementById('row-' + i);
+    if (!row) continue;
+    const isCollapsed = row.classList.contains('collapsed');
+    if (expand && isCollapsed) toggleModel(i);
+    if (!expand && !isCollapsed) toggleModel(i);
+  }
+}
+
+function scaleIframes() {
+  document.querySelectorAll('.iframe-wrap').forEach(wrap => {
+    const iframe = wrap.querySelector('iframe');
+    if (!iframe) return;
+    const nativeW = parseInt(iframe.style.width || getComputedStyle(iframe).width);
+    const nativeH = parseInt(iframe.style.height || getComputedStyle(iframe).height);
+    const wrapW = wrap.clientWidth;
+    const wrapH = wrap.clientHeight;
+    if (!wrapW || !wrapH || !nativeW || !nativeH) return;
+    const scale = Math.min(wrapW / nativeW, wrapH / nativeH);
+    iframe.style.transform = `scale(${scale})`;
+  });
+}
+
+const _resizeObserver = new ResizeObserver(() => scaleIframes());
+_resizeObserver.observe(document.body);
+
+function fmtMin(v) {
+  if (v == null) return 'N/A';
+  if (v < 1) return (v*60).toFixed(0) + 's';
+  if (v < 60) return v.toFixed(1) + 'm';
+  return (v/60).toFixed(1) + 'h';
+}
+
+function buildTable(data, trendData, containerId) {
+  const fids = D.fit_ids;
+  const labs = D.fit_labels;
+  let html = '<table class="cmp-table"><thead><tr><th>Model</th>';
+  for (const fid of fids) html += `<th>${labs[fid]}</th>`;
+  html += '</tr></thead><tbody>';
+
+  for (const [alias, short, date] of D.models) {
+    html += `<tr><td>${short}</td>`;
+    for (const fid of fids) {
+      const entry = data[fid]?.[alias];
+      if (!entry || entry[0] == null) {
+        html += '<td>N/A</td>';
+        continue;
+      }
+      const [val, lo, hi] = entry;
+      const ciLo = lo != null ? Math.min(lo, hi) : null;
+      const ciHi = lo != null ? Math.max(lo, hi) : null;
+      const ciStr = ciLo != null ? `<span class="ci">(${fmtMin(ciLo)}\u2013${fmtMin(ciHi)})</span>` : '';
+      html += `<td>${fmtMin(val)}${ciStr}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += '<tr style="border-top:2px solid #1b5e20;font-weight:700;background:#e8f5e9"><td>Doubling time</td>';
+  for (const fid of fids) {
+    const [dt, r2] = trendData[fid];
+    html += `<td>${dt.toFixed(0)}d<span class="ci">R\u00b2=${r2.toFixed(3)}</span></td>`;
+  }
+  html += '</tr>';
+  html += '</tbody></table>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+// Init
+const bar = document.getElementById('methodBar');
+for (const fid of D.fit_ids) {
+  const btn = document.createElement('button');
+  btn.className = 'method-btn';
+  btn.dataset.fitId = fid;
+  btn.textContent = D.fit_labels[fid];
+  btn.onclick = () => selectFit(fid);
+  bar.appendChild(btn);
+}
+
+buildTable(D.p50, D.p50_trend, 'p50Table');
+buildTable(D.gt, D.gt_trend, 'gtTable');
+
+selectFit(D.fit_ids[0]);
+</script>
+</body>
+</html>
