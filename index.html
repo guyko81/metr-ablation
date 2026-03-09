@@ -112,7 +112,7 @@
   <h1>Improving Curve Fitting for AI Capability Time Horizons</h1>
   <p class="subtitle">Three drop-in improvements to METR's methodology &mdash; validated with cross-validation on 18 frontier AI models</p>
   <div>
-    <span class="badge">Smoothed Isotonic Regression</span>
+    <span class="badge">Isotonic Regression</span>
     <span class="badge">G[T] Integral Metric</span>
     <span class="badge">m-out-of-n Bootstrap</span>
   </div>
@@ -127,7 +127,7 @@
 
   <div class="tldr">
     <strong>TL;DR:</strong> METR's headline finding &mdash; AI agent capabilities double roughly every 4 months &mdash; is <strong>robust</strong>.
-    Our improved methodology (smoothed isotonic + G[T] metric) gives a doubling time of <strong>~130 days</strong> with R&sup2; = 0.921, compared to METR's 121 days with R&sup2; = 0.916.
+    Our improved methodology (isotonic + G[T] metric) gives a doubling time of <strong>~130 days</strong> with R&sup2; = 0.921, compared to METR's 121 days with R&sup2; = 0.916.
     The trend is real; our improvements make it more defensible.
   </div>
 
@@ -135,14 +135,14 @@
     <h2>The Three Improvements</h2>
     <div class="improvements">
       <div class="card">
-        <h3>1. Curve Fitting: Smoothed Isotonic Regression</h3>
+        <h3>1. Curve Fitting: Isotonic Regression</h3>
         <div class="issue">The issue</div>
         <p>Logistic regression assumes a symmetric sigmoid. Real success-vs-difficulty curves are often asymmetric: quick saturation on easy tasks, slow decay on hard ones.</p>
         <div class="fix">The fix</div>
-        <p>Isotonic regression (monotone decreasing) makes no parametric assumption. Smoothed isotonic adds a Gaussian kernel in log<sub>2</sub>-space for continuity.</p>
+        <p>Isotonic regression (monotone decreasing) makes no parametric assumption. It adapts its shape freely to the data, preserving only the prior that harder tasks should not be easier.</p>
         <div class="evidence">
           <strong>Evidence:</strong> 5-fold CV Brier: <strong>0.1115</strong> (isotonic) vs 0.1212 (logistic) &mdash; 8% improvement.<br>
-          5-fold CV log-loss: <strong>0.363</strong> (smoothed isotonic) vs 0.376 (logistic) &mdash; 3.5% improvement.<br>
+          5-fold CV log-loss: <strong>0.368</strong> (isotonic) vs 0.376 (logistic) &mdash; 2.1% improvement.<br>
           Both improvements hold <em>out of sample</em>.
         </div>
       </div>
@@ -200,18 +200,9 @@
         <tr>
           <td>Isotonic</td>
           <td class="best">0.1115</td>
-          <td>0.368</td>
+          <td class="best">0.368</td>
           <td>118 d</td>
           <td>0.811</td>
-          <td>130 d</td>
-          <td class="best">0.921</td>
-        </tr>
-        <tr>
-          <td>Smoothed Isotonic</td>
-          <td>0.1167</td>
-          <td class="best">0.363</td>
-          <td>121 d</td>
-          <td>0.848</td>
           <td>130 d</td>
           <td class="best">0.921</td>
         </tr>
@@ -222,12 +213,12 @@
       <div class="metric-card">
         <div class="label">Recommended Doubling Time</div>
         <div class="value">~130 d</div>
-        <div class="detail">Smoothed Isotonic + G[T]</div>
+        <div class="detail">Isotonic + G[T]</div>
       </div>
       <div class="metric-card">
         <div class="label">Best CV Log-Loss</div>
-        <div class="value">0.363</div>
-        <div class="detail">Smoothed Isotonic</div>
+        <div class="value">0.368</div>
+        <div class="detail">Isotonic</div>
       </div>
       <div class="metric-card">
         <div class="label">Best CV Brier</div>
@@ -252,7 +243,7 @@
     <h2>Models Evaluated</h2>
     <p style="font-size:14px; margin-bottom: 12px;">18 frontier AI models from 4 families, released between March 2023 and December 2025:</p>
     <table class="results-table" style="font-size:13px;">
-      <thead><tr><th>Model</th><th>Release Date</th><th>G[T] (smoothed iso.)</th></tr></thead>
+      <thead><tr><th>Model</th><th>Release Date</th><th>G[T] (isotonic)</th></tr></thead>
       <tbody>
         <tr><td>GPT-4</td><td>2023-03-14</td><td>3.4 min</td></tr>
         <tr><td>GPT-4 1106</td><td>2023-11-06</td><td>3.5 min</td></tr>
@@ -284,7 +275,7 @@
 cd metr-ablation
 pip install -r requirements.txt
 python run.py</pre>
-      <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">Generates all 54 per-model fit plots, 6 trend charts, comparison tables, and the interactive viewer.</p>
+      <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">Generates all 36 per-model fit plots, 4 trend charts, comparison tables, and the interactive viewer.</p>
     </div>
   </section>
 

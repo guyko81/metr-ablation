@@ -1,6 +1,6 @@
 """
-Runner: logistic vs isotonic vs smoothed isotonic.
-Runs all three fits and generates viewer.html.
+Runner: logistic vs isotonic.
+Runs both fits and generates viewer.html.
 
 Usage:
     python run.py
@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from curve_models import IsotonicModel, LogisticModel, SmoothedIsotonicModel
+from curve_models import IsotonicModel, LogisticModel
 from pipeline import run_ablation
 
 BASE_DIR = os.path.dirname(__file__)
@@ -25,8 +25,6 @@ FITS = [
      "Logistic regression (METR default, C=10)"),
     ("isotonic", IsotonicModel(),
      "Isotonic regression (decreasing, weighted)"),
-    ("smoothed_isotonic", SmoothedIsotonicModel(sigma_log2=0.5),
-     "Smoothed isotonic (sigma=0.5 in log2 space)"),
 ]
 
 
@@ -82,7 +80,8 @@ def main():
 
 
 def generate_viewer(all_results):
-    """Generate self-contained HTML viewer for comparing the three methods."""
+    """Generate self-contained HTML viewer with embedded charts."""
+    import base64
     from pipeline import SHORT_NAMES
 
     fit_ids = [f[0] for f in FITS]
@@ -118,6 +117,23 @@ def generate_viewer(all_results):
         safe = alias.replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
         safe_names.append(safe)
 
+    # Read and base64-encode all pre-computed chart HTML files
+    charts = {}
+    for fid in fit_ids:
+        fid_dir = os.path.join(BASE_DIR, fid)
+        for chart_name in ["metr_trend_p50.html", "metr_trend_GT.html"]:
+            path = os.path.join(fid_dir, chart_name)
+            with open(path, "r", encoding="utf-8") as cf:
+                content = cf.read()
+            key = f"{fid}/{chart_name}"
+            charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        for safe in safe_names:
+            path = os.path.join(fid_dir, "per_model", f"{safe}_fit.html")
+            with open(path, "r", encoding="utf-8") as cf:
+                content = cf.read()
+            key = f"{fid}/per_model/{safe}_fit.html"
+            charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
+
     viewer_data = json.dumps({
         "fits": {fid: {
             "model_name": all_results[fid]["model_name"],
@@ -134,13 +150,14 @@ def generate_viewer(all_results):
         "gt": gt_data,
         "p50_trend": p50_trend,
         "gt_trend": gt_trend,
+        "charts": charts,
     }, indent=2)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ablation v2: Logistic vs Isotonic vs Smoothed Isotonic</title>
+<title>Ablation v2: Logistic vs Isotonic</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }}
@@ -236,7 +253,7 @@ def generate_viewer(all_results):
 <body>
 
 <header>
-  <h1>METR Time Horizon: Curve Fitting Method Comparison</h1>
+  <h1>METR Time Horizon: Logistic vs Isotonic</h1>
   <p>K-fold cross-validated fit quality | m-out-of-n bootstrap for isotonic | G[T] integral metric</p>
 </header>
 
@@ -267,6 +284,10 @@ def generate_viewer(all_results):
 
 <script>
 const D = {viewer_data};
+
+function chartSrc(key) {{
+  return "data:text/html;base64," + D.charts[key];
+}}
 
 let currentFit = null;
 
@@ -306,12 +327,12 @@ function renderMetrGrid() {{
     <div class="metr-cell">
       <div class="cell-label">P50 Threshold</div>
       <div class="cell-stats">${{tp.doubling_time_days}}d | R&sup2;=${{tp.r_squared.toFixed(3)}}</div>
-      <div class="iframe-wrap"><iframe src="${{dir}}/metr_trend_p50.html" loading="lazy"></iframe></div>
+      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_p50.html')}}"></iframe></div>
     </div>
     <div class="metr-cell">
       <div class="cell-label">G[T] Geometric Mean</div>
       <div class="cell-stats">${{tg.doubling_time_days}}d | R&sup2;=${{tg.r_squared.toFixed(3)}}</div>
-      <div class="iframe-wrap"><iframe src="${{dir}}/metr_trend_GT.html" loading="lazy"></iframe></div>
+      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_GT.html')}}"></iframe></div>
     </div>
   `;
 }}
@@ -322,13 +343,14 @@ function renderModels() {{
   for (let i = 0; i < D.models.length; i++) {{
     const [alias, short, date] = D.models[i];
     const safe = D.safe_names[i];
-    html += `<div class="model-row collapsed" id="row-${{i}}">
+    const src = chartSrc(dir + '/per_model/' + safe + '_fit.html');
+    html += `<div class="model-row" id="row-${{i}}">
       <div class="model-row-header" onclick="toggleModel(${{i}})">
         <span>${{short}} <span style="font-weight:normal;color:#888;font-size:12px">(${{date}})</span></span>
-        <span class="toggle" style="font-size:12px;color:#888">Click to expand</span>
+        <span class="toggle" style="font-size:12px;color:#888">Click to collapse</span>
       </div>
       <div class="model-row-body">
-        <div class="iframe-wrap"><iframe src="${{dir}}/per_model/${{safe}}_fit.html" loading="lazy"></iframe></div>
+        <div class="iframe-wrap"><iframe src="${{src}}"></iframe></div>
       </div>
     </div>`;
   }}
@@ -408,6 +430,17 @@ function buildTable(data, trendData, containerId) {{
   html += '</tr>';
   html += '</tbody></table>';
   document.getElementById(containerId).innerHTML = html;
+}}
+
+// Init
+const bar = document.getElementById('methodBar');
+for (const fid of D.fit_ids) {{
+  const btn = document.createElement('button');
+  btn.className = 'method-btn';
+  btn.dataset.fitId = fid;
+  btn.textContent = D.fit_labels[fid];
+  btn.onclick = () => selectFit(fid);
+  bar.appendChild(btn);
 }}
 
 buildTable(D.p50, D.p50_trend, 'p50Table');
