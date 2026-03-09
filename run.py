@@ -128,11 +128,14 @@ def generate_viewer(all_results):
             key = f"{fid}/{chart_name}"
             charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
         for safe in safe_names:
-            path = os.path.join(fid_dir, "per_model", f"{safe}_fit.html")
-            with open(path, "r", encoding="utf-8") as cf:
-                content = cf.read()
-            key = f"{fid}/per_model/{safe}_fit.html"
-            charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
+            for suffix in ["_fit.html", "_binned.html"]:
+                path = os.path.join(fid_dir, "per_model", f"{safe}{suffix}")
+                if not os.path.exists(path):
+                    continue
+                with open(path, "r", encoding="utf-8") as cf:
+                    content = cf.read()
+                key = f"{fid}/per_model/{safe}{suffix}"
+                charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
     viewer_data = json.dumps({
         "fits": {fid: {
@@ -225,7 +228,7 @@ def generate_viewer(all_results):
     display: flex; justify-content: space-between; align-items: center;
   }}
   .model-row-header:hover {{ background: #f0f0f0; }}
-  .model-row-body {{ }}
+  .model-row-body {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }}
   .model-row-body .iframe-wrap {{ height: 500px; }}
   .model-row-body .iframe-wrap iframe {{ width: 1100px; height: 605px; }}
   .model-row.collapsed .model-row-body {{ display: none; }}
@@ -343,14 +346,18 @@ function renderModels() {{
   for (let i = 0; i < D.models.length; i++) {{
     const [alias, short, date] = D.models[i];
     const safe = D.safe_names[i];
-    const src = chartSrc(dir + '/per_model/' + safe + '_fit.html');
+    const fitSrc = chartSrc(dir + '/per_model/' + safe + '_fit.html');
+    const binnedKey = dir + '/per_model/' + safe + '_binned.html';
+    const hasBinned = D.charts[binnedKey] != null;
+    const binnedSrc = hasBinned ? chartSrc(binnedKey) : '';
     html += `<div class="model-row" id="row-${{i}}">
       <div class="model-row-header" onclick="toggleModel(${{i}})">
         <span>${{short}} <span style="font-weight:normal;color:#888;font-size:12px">(${{date}})</span></span>
         <span class="toggle" style="font-size:12px;color:#888">Click to collapse</span>
       </div>
       <div class="model-row-body">
-        <div class="iframe-wrap"><iframe src="${{src}}"></iframe></div>
+        <div class="iframe-wrap"><iframe src="${{fitSrc}}"></iframe></div>
+        ${{hasBinned ? `<div class="iframe-wrap"><iframe src="${{binnedSrc}}"></iframe></div>` : ''}}
       </div>
     </div>`;
   }}

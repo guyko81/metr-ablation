@@ -247,6 +247,7 @@ def bootstrap_curves_and_crossings(
 
     ci_lo = np.nanpercentile(boot_curves, 5, axis=0)
     ci_hi = np.nanpercentile(boot_curves, 95, axis=0)
+    ci_median = np.nanpercentile(boot_curves, 50, axis=0)
 
     crossings_dict = {}
     for thr in thresholds:
@@ -263,7 +264,7 @@ def bootstrap_curves_and_crossings(
 
     boot_method = f"m-out-of-n (m={m})" if use_m_of_n else f"standard (n={n})"
 
-    return ci_lo, ci_hi, crossings_dict, integral_ci, boot_method
+    return ci_lo, ci_hi, ci_median, crossings_dict, integral_ci, boot_method
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +290,7 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     integral_point = compute_integral_metric(x_grid, y_full)
 
     # Bootstrap
-    ci_lo, ci_hi, crossings_dict, integral_ci, boot_method = bootstrap_curves_and_crossings(
+    ci_lo, ci_hi, ci_median, crossings_dict, integral_ci, boot_method = bootstrap_curves_and_crossings(
         X, y, w, model_factory, x_grid, n_boot=n_boot, seed=seed
     )
 
@@ -322,6 +323,12 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
         y=np.concatenate([ci_hi, ci_lo[::-1]]),
         fill="toself", fillcolor="rgba(100,100,200,0.2)",
         line=dict(width=0), name=ci_label, hoverinfo="skip",
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=minutes_grid, y=ci_median,
+        mode="lines", name="Bootstrap median",
+        line=dict(color="rgba(100,100,200,0.6)", width=1.5, dash="dot"),
     ))
 
     fig.add_trace(go.Scatter(
@@ -361,6 +368,108 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     }
 
     return fig, results, x_grid, y_full
+
+
+def plot_per_model_binned(alias, df_model, model_factory, x_grid, y_full):
+    """Stacked bar chart: empirical success/failure per bin vs fit mean."""
+    X = np.log2(df_model["human_minutes"].values)
+    y = df_model["score_binarized"].values.astype(float)
+    w = df_model[WEIGHT_KEY].values
+
+    # Build bins from BAR_TIMES
+    edges_min = BAR_TIMES
+    bins = []
+    for i in range(len(edges_min) - 1):
+        lo, hi = edges_min[i], edges_min[i + 1]
+        mask = (df_model["human_minutes"].values >= lo) & (df_model["human_minutes"].values < hi)
+        if mask.sum() == 0:
+            continue
+        w_bin = w[mask]
+        y_bin = y[mask]
+        w_total = w_bin.sum()
+        w_success = (w_bin * y_bin).sum()
+        w_fail = w_total - w_success
+        p_success = w_success / w_total if w_total > 0 else 0
+
+        # Fit mean at bin center (in log2 space)
+        center_log2 = (np.log2(lo) + np.log2(hi)) / 2
+        idx = np.argmin(np.abs(x_grid - center_log2))
+        fit_mean = float(y_full[idx])
+
+        label = f"{fmt_time(lo)}-{fmt_time(hi)} n={mask.sum()}"
+        bins.append({
+            "label": label,
+            "n": int(mask.sum()),
+            "p_success": p_success,
+            "p_fail": 1 - p_success,
+            "fit_mean": fit_mean,
+        })
+
+    # Add final bin (>= last edge)
+    lo = edges_min[-1]
+    mask = df_model["human_minutes"].values >= lo
+    if mask.sum() > 0:
+        w_bin = w[mask]
+        y_bin = y[mask]
+        w_total = w_bin.sum()
+        w_success = (w_bin * y_bin).sum()
+        p_success = w_success / w_total if w_total > 0 else 0
+        center_log2 = np.log2(lo) + 0.5
+        idx = min(np.argmin(np.abs(x_grid - center_log2)), len(y_full) - 1)
+        fit_mean = float(y_full[idx])
+        label = f">{fmt_time(lo)} n={mask.sum()}"
+        bins.append({
+            "label": label,
+            "n": int(mask.sum()),
+            "p_success": p_success,
+            "p_fail": 1 - p_success,
+            "fit_mean": fit_mean,
+        })
+
+    if not bins:
+        return None
+
+    labels = [b["label"] for b in bins]
+    p_success = [b["p_success"] for b in bins]
+    p_fail = [b["p_fail"] for b in bins]
+    fit_means = [b["fit_mean"] for b in bins]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=labels, y=p_success, name="P(success)",
+        marker_color="#2e7d32", text=[f"{v:.0%}" for v in p_success],
+        textposition="inside", textfont=dict(size=10, color="white"),
+    ))
+    fig.add_trace(go.Bar(
+        x=labels, y=p_fail, name="P(failure)",
+        marker_color="#e65100", text=[f"{v:.0%}" if v > 0.05 else "" for v in p_fail],
+        textposition="inside", textfont=dict(size=10, color="white"),
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=labels, y=fit_means, name="Fit mean",
+        mode="markers", marker=dict(symbol="diamond", size=10, color="black",
+                                     line=dict(width=1, color="white")),
+    ))
+
+    # Empirical annotations on top of bars
+    for i, b in enumerate(bins):
+        fig.add_annotation(
+            x=labels[i], y=1.02, text=f"{b['p_success']:.0%}",
+            showarrow=False, font=dict(size=9), yref="y",
+        )
+
+    fig.update_layout(
+        barmode="stack",
+        title=f"{alias} - {model_factory.name} - Probability mass + empirical vs fit mean",
+        xaxis=dict(title="Task length (bin range, n=runs)", tickangle=-45, tickfont=dict(size=9)),
+        yaxis=dict(title="Probability", range=[0, 1.08], tickformat=".0%"),
+        template="plotly_white", width=1000, height=550,
+        legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"),
+    )
+
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -551,8 +660,12 @@ def run_ablation(
             alias, df_m, model_factory, n_boot=n_boot, seed=seed
         )
 
+        fig_binned = plot_per_model_binned(alias, df_m, model_factory, x_grid, y_full)
+
         safe_name = alias.replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
         pio.write_html(fig_fit, os.path.join(per_model_dir, f"{safe_name}_fit.html"), include_plotlyjs="cdn")
+        if fig_binned is not None:
+            pio.write_html(fig_binned, os.path.join(per_model_dir, f"{safe_name}_binned.html"), include_plotlyjs="cdn")
 
         row = {"alias": alias, "release_date": release_date}
         row.update(model_results)
