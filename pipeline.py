@@ -621,6 +621,127 @@ def plot_metr_trend(res_df, model_name_str,
     return fig, doubling_time_days, r_value ** 2
 
 
+def plot_metr_trend_comparison(all_results, metric_label, point_col, ci_lo_col, ci_hi_col):
+    """Comparison chart: logistic vs isotonic on the same axes."""
+    import plotly.graph_objects as go
+
+    COLORS = {"logistic": "#1565c0", "isotonic": "#2e7d32"}
+    LABELS = {"logistic": "Logistic", "isotonic": "Isotonic"}
+
+    fig = go.Figure()
+
+    all_vals = []
+    all_date_nums = []
+
+    for fid in ["logistic", "isotonic"]:
+        summary = all_results[fid]
+        rows = summary["per_model_results"]
+        valid_rows = [r for r in rows if r.get(point_col) is not None]
+        if not valid_rows:
+            continue
+
+        dates = [pd.Timestamp(r["release_date"]) for r in valid_rows]
+        vals = np.array([r[point_col] for r in valid_rows])
+        ci_lo = np.array([r.get(ci_lo_col) or r[point_col] for r in valid_rows])
+        ci_hi = np.array([r.get(ci_hi_col) or r[point_col] for r in valid_rows])
+        aliases = [r["alias"] for r in valid_rows]
+
+        date_nums = np.array(
+            [(d - pd.Timestamp("1970-01-01")).days for d in dates], dtype=float
+        )
+        all_vals.extend(vals)
+        all_date_nums.extend(date_nums)
+
+        log_vals = np.log(vals)
+        valid_mask = np.isfinite(log_vals) & (vals > 0)
+        slope, intercept, r_value, _, _ = linregress(date_nums[valid_mask], log_vals[valid_mask])
+        doubling_days = np.log(2) / slope
+
+        pad_before, pad_after = 180, 365
+        date_range = np.linspace(date_nums.min() - pad_before, date_nums.max() + pad_after, 500)
+        dates_range_ts = pd.to_datetime(date_range, unit="D", origin="1970-01-01")
+        trend = np.exp(intercept + slope * date_range)
+
+        color = COLORS[fid]
+        label = LABELS[fid]
+
+        # Trend line
+        fig.add_trace(go.Scatter(
+            x=dates_range_ts, y=trend,
+            mode="lines", name=f"{label} trend ({doubling_days:.0f}d, R²={r_value**2:.3f})",
+            line=dict(color=color, width=2, dash="dash" if fid == "logistic" else "solid"),
+            hoverinfo="skip",
+        ))
+
+        # Error bars
+        for i in range(len(valid_rows)):
+            lo = ci_lo[i] if not np.isnan(ci_lo[i]) else vals[i]
+            hi = ci_hi[i] if not np.isnan(ci_hi[i]) else vals[i]
+            fig.add_trace(go.Scatter(
+                x=[dates[i], dates[i]], y=[lo, hi],
+                mode="lines", line=dict(color=color, width=1.5),
+                showlegend=False, hoverinfo="skip",
+            ))
+
+        # Points
+        hover_text = [
+            f"<b>{SHORT_NAMES.get(aliases[i], aliases[i])}</b><br>"
+            f"{label} {metric_label}: {fmt_time(vals[i])}<br>"
+            f"Released: {dates[i].strftime('%Y-%m-%d')}"
+            for i in range(len(valid_rows))
+        ]
+        fig.add_trace(go.Scatter(
+            x=dates, y=vals,
+            mode="markers+text",
+            marker=dict(color=color, size=8, symbol="circle" if fid == "isotonic" else "diamond",
+                        line=dict(width=1, color="white")),
+            text=[SHORT_NAMES.get(a, a) for a in aliases],
+            textposition="top center",
+            textfont=dict(size=8, color=color),
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=hover_text,
+            name=f"{label} models",
+        ))
+
+    all_vals = np.array(all_vals)
+    ytick_minutes = [0.5, 1, 2, 4, 8, 15, 30, 60, 2*60, 4*60, 8*60, 16*60, 32*60, 64*60]
+    ytick_labels = []
+    for m in ytick_minutes:
+        if m < 1:
+            ytick_labels.append(f"{m*60:.0f} sec")
+        elif m < 60:
+            ytick_labels.append(f"{m:.0f} min")
+        else:
+            ytick_labels.append(f"{m/60:.0f} hr")
+
+    fig.update_layout(
+        title=dict(
+            text=(
+                f"Logistic vs Isotonic: {metric_label} threshold crossing<br>"
+                f"<span style='font-size:12px;color:#666'>"
+                f"Both methods on the same axes for direct comparison</span>"
+            ),
+            x=0.5,
+        ),
+        xaxis=dict(title="Model release date"),
+        yaxis=dict(
+            title=f"Task time ({metric_label})",
+            type="log",
+            tickvals=ytick_minutes,
+            ticktext=ytick_labels,
+            range=[np.log10(max(min(all_vals[all_vals > 0]), 0.1) * 0.3), np.log10(max(all_vals) * 5)],
+        ),
+        template="plotly_white",
+        width=1100, height=650,
+        showlegend=True,
+        legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top",
+                    bgcolor="rgba(255,255,255,0.8)", bordercolor="#ddd", borderwidth=1),
+        hovermode="closest",
+    )
+
+    return fig
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------

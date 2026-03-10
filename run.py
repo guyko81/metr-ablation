@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from curve_models import IsotonicModel, LogisticModel
-from pipeline import run_ablation
+from pipeline import run_ablation, plot_metr_trend_comparison
 
 BASE_DIR = os.path.dirname(__file__)
 RUNS_PATH = os.path.join(BASE_DIR, "data", "runs.jsonl")
@@ -79,8 +79,98 @@ def main():
               f"{t_gt.get('r_squared', 'N/A'):<10} "
               f"{bt}")
 
+    # Generate comparison charts
+    generate_comparison_charts(all_results)
+
     # Generate viewer
     generate_viewer(all_results)
+
+
+def generate_comparison_charts(all_results):
+    """Generate logistic-vs-isotonic comparison charts and update index.html."""
+    import base64
+    import plotly.io as pio
+
+    charts = {}
+    for metric_label, point_col, lo_col, hi_col in [
+        ("p50", "p50_minutes", "p50_ci_lo", "p50_ci_hi"),
+        ("G[T]", "integral_minutes", "integral_ci_lo", "integral_ci_hi"),
+    ]:
+        fig = plot_metr_trend_comparison(all_results, metric_label, point_col, lo_col, hi_col)
+        safe = metric_label.replace("[", "").replace("]", "")
+        path = os.path.join(BASE_DIR, f"comparison_{safe}.html")
+        pio.write_html(fig, path, include_plotlyjs="cdn")
+        with open(path, "r", encoding="utf-8") as f:
+            charts[safe] = base64.b64encode(f.read().encode("utf-8")).decode("ascii")
+        print(f"  Comparison chart saved: {path}")
+
+    # Update index.html with embedded charts
+    index_path = os.path.join(BASE_DIR, "index.html")
+    with open(index_path, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    # Insert or replace comparison section
+    comparison_html = f'''  <section>
+    <h2>Logistic vs Isotonic: Direct Comparison</h2>
+    <p style="font-size:14px; margin-bottom: 12px;">Both methods plotted on the same axes. Blue diamonds = logistic, green circles = isotonic (bootstrap median crossings).</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; position: relative;">
+        <div style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
+          <iframe src="data:text/html;base64,{charts['p50']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
+        </div>
+      </div>
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; position: relative;">
+        <div style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
+          <iframe src="data:text/html;base64,{charts['GT']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
+        </div>
+      </div>
+    </div>
+  </section>'''
+
+    # Check if comparison section already exists
+    marker_start = '<!-- COMPARISON_CHARTS_START -->'
+    marker_end = '<!-- COMPARISON_CHARTS_END -->'
+    comparison_block = f"{marker_start}\n{comparison_html}\n{marker_end}"
+
+    if marker_start in html:
+        import re
+        html = re.sub(
+            f'{marker_start}.*?{marker_end}',
+            comparison_block,
+            html,
+            flags=re.DOTALL
+        )
+    else:
+        # Insert before the viewer-promo section
+        html = html.replace(
+            '  <div class="viewer-promo">',
+            f'{comparison_block}\n\n  <div class="viewer-promo">'
+        )
+
+    # Add iframe scaling script if not present
+    if 'scaleComparisonIframes' not in html:
+        scale_script = '''<script>
+function scaleComparisonIframes() {
+  document.querySelectorAll('section iframe').forEach(iframe => {
+    const wrap = iframe.parentElement;
+    if (!wrap) return;
+    const wrapW = wrap.clientWidth;
+    const nativeW = parseInt(iframe.style.width);
+    if (wrapW && nativeW) {
+      const scale = wrapW / nativeW;
+      iframe.style.transform = 'scale(' + scale + ')';
+    }
+  });
+}
+window.addEventListener('load', scaleComparisonIframes);
+window.addEventListener('resize', scaleComparisonIframes);
+</script>
+</body>'''
+        html = html.replace('</body>', scale_script)
+
+    with open(index_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"  Index page updated with comparison charts")
 
 
 def generate_viewer(all_results):
@@ -201,7 +291,7 @@ def generate_viewer(all_results):
 
   .metr-grid {{
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 4px;
     padding: 0 24px 16px;
   }}
@@ -211,12 +301,21 @@ def generate_viewer(all_results):
   .metr-cell .cell-label {{
     position: absolute; top: 4px; left: 6px; z-index: 10;
     background: rgba(27,94,32,0.9); color: white; padding: 2px 8px; border-radius: 4px;
-    font-size: 11px; font-weight: 600;
+    font-size: 10px; font-weight: 600;
   }}
   .metr-cell .cell-stats {{
     position: absolute; top: 4px; right: 6px; z-index: 10;
     background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px;
-    font-size: 10px;
+    font-size: 9px;
+  }}
+  .metr-cell .iframe-wrap {{
+    width: 100%; overflow: hidden;
+    aspect-ratio: 1100 / 650;
+  }}
+  .metr-cell .iframe-wrap iframe {{
+    border: none;
+    transform-origin: 0 0;
+    width: 1100px; height: 650px;
   }}
   .iframe-wrap {{
     width: 100%; overflow: hidden;
