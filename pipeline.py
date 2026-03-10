@@ -458,8 +458,9 @@ def plot_per_model_binned(alias, df_model, model_factory, x_grid, y_full):
 
     fig.add_trace(go.Scatter(
         x=labels, y=fit_means, name="Fit mean",
-        mode="markers", marker=dict(symbol="diamond", size=10, color="black",
+        mode="markers+lines", marker=dict(symbol="diamond", size=10, color="black",
                                      line=dict(width=1, color="white")),
+        line=dict(width=2, color="black", dash="dot"),
     ))
 
     # Empirical annotations on top of bars
