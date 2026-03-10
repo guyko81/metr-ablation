@@ -110,10 +110,11 @@
 
 <div class="hero">
   <h1>Improving Curve Fitting for AI Capability Time Horizons</h1>
-  <p class="subtitle">Three drop-in improvements to METR's methodology &mdash; validated with cross-validation on 18 frontier AI models</p>
+  <p class="subtitle">Drop-in improvements to METR's methodology &mdash; three metrics (p<sub>50</sub>, p<sub>80</sub>, G[T]), bootstrap median crossings, validated on 18 frontier AI models</p>
   <div>
     <span class="badge">Isotonic Regression</span>
-    <span class="badge">G[T] Integral Metric</span>
+    <span class="badge">Bootstrap Median Crossings</span>
+    <span class="badge">p50 / p80 / G[T] Metrics</span>
     <span class="badge">m-out-of-n Bootstrap</span>
   </div>
 </div>
@@ -127,8 +128,9 @@
 
   <div class="tldr">
     <strong>TL;DR:</strong> METR's headline finding &mdash; AI agent capabilities double roughly every 4 months &mdash; is <strong>robust</strong>.
-    Our improved methodology (isotonic + G[T] metric) gives a doubling time of <strong>~130 days</strong> with R&sup2; = 0.921, compared to METR's 121 days with R&sup2; = 0.916.
-    The trend is real; our improvements make it more defensible.
+    We report three complementary metrics: <strong>p<sub>50</sub></strong> (median-difficulty frontier), <strong>p<sub>80</sub></strong> (easy-task frontier, doubling ~111&ndash;121 days), and <strong>G[T]</strong> (full-curve integral, doubling <strong>~130 days</strong>, R&sup2; = 0.921).
+    For isotonic regression, we use bootstrap median crossings instead of the single full-data fit, yielding smoother per-model values.
+    The trend is real; our improvements make it more defensible and multi-dimensional.
   </div>
 
   <section>
@@ -148,15 +150,16 @@
       </div>
 
       <div class="card">
-        <h3>2. Summary Metric: G[T] Integral</h3>
+        <h3>2. Summary Metrics: p<sub>50</sub>, p<sub>80</sub>, and G[T]</h3>
         <div class="issue">The issue</div>
-        <p>The <span class="math">p</span><sub>50</sub> crossing point is a single-point statistic, extremely sensitive to local curve shape near 50%. For step-function curves it jumps discontinuously.</p>
+        <p>A single threshold crossing (p<sub>50</sub>) is sensitive to local curve shape and jumps discontinuously for step-function fits. One number cannot capture the full picture of capability growth.</p>
         <div class="fix">The fix</div>
-        <p>G[T] = geometric mean capability time. Treats <span class="math">q</span>(<span class="math">u</span>) = 1 &minus; <span class="math">p</span>(<span class="math">u</span>) as a CDF in log<sub>2</sub>-space, computes E[U] via integration, returns 2<sup>E[U]</sup>.</p>
+        <p>We report three complementary metrics: <strong>p<sub>50</sub></strong> (median-difficulty frontier), <strong>p<sub>80</sub></strong> (easy-task frontier where models achieve 80% success), and <strong>G[T]</strong> (geometric mean capability time from the full curve integral).
+        For isotonic regression, threshold crossings use the <strong>bootstrap median curve</strong> instead of the single full-data fit, producing smoother per-model values.</p>
         <div class="evidence">
-          <strong>Evidence:</strong> G[T] R&sup2;: <strong>0.916&ndash;0.921</strong> across all methods (nearly identical).<br>
-          p<sub>50</sub> R&sup2;: 0.852&ndash;0.916 | p<sub>80</sub> R&sup2;: 0.881&ndash;0.901.<br>
-          G[T] uses the entire curve, averaging over regions where all methods agree.
+          <strong>Evidence:</strong> G[T] R&sup2;: <strong>0.916&ndash;0.921</strong> across methods (most stable).<br>
+          p<sub>80</sub> doubling: 111&ndash;121 days (R&sup2; = 0.881&ndash;0.901) &mdash; captures easy-task frontier growth.<br>
+          p<sub>50</sub> doubling: 121&ndash;130 days (R&sup2; = 0.852&ndash;0.916) &mdash; traditional metric, now stabilized via bootstrap median.
         </div>
       </div>
 
@@ -217,14 +220,19 @@
 
     <div class="metric-cards">
       <div class="metric-card">
-        <div class="label">Recommended Doubling Time</div>
+        <div class="label">G[T] Doubling</div>
         <div class="value">~130 d</div>
-        <div class="detail">Isotonic + G[T]</div>
+        <div class="detail">Isotonic, R&sup2; = 0.921</div>
       </div>
       <div class="metric-card">
-        <div class="label">Best CV Log-Loss</div>
-        <div class="value">0.368</div>
-        <div class="detail">Isotonic</div>
+        <div class="label">p<sub>80</sub> Doubling</div>
+        <div class="value">~111 d</div>
+        <div class="detail">Isotonic, R&sup2; = 0.881</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">p<sub>50</sub> Doubling</div>
+        <div class="value">~130 d</div>
+        <div class="detail">Isotonic (bootstrap median)</div>
       </div>
       <div class="metric-card">
         <div class="label">Best CV Brier</div>
@@ -241,7 +249,7 @@
 
   <div class="viewer-promo">
     <h3>Interactive Viewer</h3>
-    <p>Explore all per-model curve fits, trend charts, comparison tables, and bootstrap confidence bands.</p>
+    <p>Explore per-model curve fits with bootstrap median, p<sub>50</sub>/p<sub>80</sub>/G[T] trend charts, comparison tables, and binned probability checks.</p>
     <a href="viewer.html">Open Interactive Viewer &rarr;</a>
   </div>
 
@@ -249,28 +257,29 @@
     <h2>Models Evaluated</h2>
     <p style="font-size:14px; margin-bottom: 12px;">18 frontier AI models from 4 families, released between March 2023 and December 2025:</p>
     <table class="results-table" style="font-size:13px;">
-      <thead><tr><th>Model</th><th>Release Date</th><th>G[T] (isotonic)</th></tr></thead>
+      <thead><tr><th>Model</th><th>Release Date</th><th>p<sub>80</sub></th><th>p<sub>50</sub></th><th>G[T]</th></tr></thead>
       <tbody>
-        <tr><td>GPT-4</td><td>2023-03-14</td><td>3.4 min</td></tr>
-        <tr><td>GPT-4 1106</td><td>2023-11-06</td><td>3.5 min</td></tr>
-        <tr><td>Claude 3 Opus</td><td>2024-03-04</td><td>3.2 min</td></tr>
-        <tr><td>GPT-4 Turbo</td><td>2024-04-09</td><td>3.7 min</td></tr>
-        <tr><td>GPT-4o</td><td>2024-05-13</td><td>6.9 min</td></tr>
-        <tr><td>Claude 3.5 Sonnet</td><td>2024-06-20</td><td>12.1 min</td></tr>
-        <tr><td>o1-preview</td><td>2024-09-12</td><td>18.9 min</td></tr>
-        <tr><td>Claude 3.5 Sonnet (New)</td><td>2024-10-22</td><td>16.9 min</td></tr>
-        <tr><td>o1</td><td>2024-12-05</td><td>35.7 min</td></tr>
-        <tr><td>Claude 3.7 Sonnet</td><td>2025-02-24</td><td>51.6 min</td></tr>
-        <tr><td>o3</td><td>2025-04-16</td><td>1.8 hr</td></tr>
-        <tr><td>Claude 4 Opus</td><td>2025-05-22</td><td>1.4 hr</td></tr>
-        <tr><td>Claude 4.1 Opus</td><td>2025-08-05</td><td>1.4 hr</td></tr>
-        <tr><td>GPT-5</td><td>2025-08-07</td><td>2.6 hr</td></tr>
-        <tr><td>Gemini 3 Pro</td><td>2025-11-18</td><td>3.5 hr</td></tr>
-        <tr><td>GPT-5.1 Codex-Max</td><td>2025-11-19</td><td>2.9 hr</td></tr>
-        <tr><td>Claude Opus 4.5</td><td>2025-11-24</td><td>3.8 hr</td></tr>
-        <tr><td>GPT-5.2</td><td>2025-12-11</td><td>4.4 hr</td></tr>
+        <tr><td>GPT-4</td><td>2023-03-14</td><td>49 sec</td><td>3.1 min</td><td>3.4 min</td></tr>
+        <tr><td>GPT-4 1106</td><td>2023-11-06</td><td>52 sec</td><td>2.0 min</td><td>3.5 min</td></tr>
+        <tr><td>Claude 3 Opus</td><td>2024-03-04</td><td>37 sec</td><td>1.6 min</td><td>3.2 min</td></tr>
+        <tr><td>GPT-4 Turbo</td><td>2024-04-09</td><td>59 sec</td><td>3.7 min</td><td>3.7 min</td></tr>
+        <tr><td>GPT-4o</td><td>2024-05-13</td><td>1.5 min</td><td>8.5 min</td><td>6.9 min</td></tr>
+        <tr><td>Claude 3.5 Sonnet</td><td>2024-06-20</td><td>2.0 min</td><td>14.5 min</td><td>12.1 min</td></tr>
+        <tr><td>o1-preview</td><td>2024-09-12</td><td>3.0 min</td><td>46.5 min</td><td>18.9 min</td></tr>
+        <tr><td>Claude 3.5 Sonnet (New)</td><td>2024-10-22</td><td>2.4 min</td><td>45.4 min</td><td>16.9 min</td></tr>
+        <tr><td>o1</td><td>2024-12-05</td><td>6.1 min</td><td>1.0 hr</td><td>35.7 min</td></tr>
+        <tr><td>Claude 3.7 Sonnet</td><td>2025-02-24</td><td>21.7 min</td><td>57.8 min</td><td>51.6 min</td></tr>
+        <tr><td>o3</td><td>2025-04-16</td><td>51.4 min</td><td>1.6 hr</td><td>1.8 hr</td></tr>
+        <tr><td>Claude 4 Opus</td><td>2025-05-22</td><td>49.2 min</td><td>1.7 hr</td><td>1.4 hr</td></tr>
+        <tr><td>Claude 4.1 Opus</td><td>2025-08-05</td><td>51.3 min</td><td>1.6 hr</td><td>1.4 hr</td></tr>
+        <tr><td>GPT-5</td><td>2025-08-07</td><td>1.1 hr</td><td>1.8 hr</td><td>2.6 hr</td></tr>
+        <tr><td>Gemini 3 Pro</td><td>2025-11-18</td><td>1.4 hr</td><td>2.0 hr</td><td>3.5 hr</td></tr>
+        <tr><td>GPT-5.1 Codex-Max</td><td>2025-11-19</td><td>52.5 min</td><td>1.9 hr</td><td>2.9 hr</td></tr>
+        <tr><td>Claude Opus 4.5</td><td>2025-11-24</td><td>1.5 hr</td><td>3.7 hr</td><td>3.8 hr</td></tr>
+        <tr><td>GPT-5.2</td><td>2025-12-11</td><td>1.7 hr</td><td>6.2 hr</td><td>4.4 hr</td></tr>
       </tbody>
     </table>
+    <p style="font-size:12px; color: var(--muted); margin-top: 8px;">All values from isotonic regression. p<sub>50</sub>/p<sub>80</sub> use bootstrap median crossings for smoother estimates.</p>
   </section>
 
   <section>
