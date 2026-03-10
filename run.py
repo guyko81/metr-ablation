@@ -226,6 +226,10 @@ def generate_viewer(all_results):
                 key = f"{fid}/per_model/{safe}{suffix}"
                 charts[key] = base64.b64encode(content).decode("ascii")
 
+    # Create compare output directory
+    compare_dir = os.path.join(BASE_DIR, "compare", "per_model")
+    os.makedirs(compare_dir, exist_ok=True)
+
     # Generate "compare" trend charts (both methods overlaid)
     for metric_label, point_col, lo_col, hi_col in [
         ("p50", "p50_minutes", "p50_ci_lo", "p50_ci_hi"),
@@ -239,6 +243,11 @@ def generate_viewer(all_results):
         plt.close(fig)
         buf.seek(0)
         charts[f"compare/metr_trend_{safe_metric}.png"] = base64.b64encode(buf.read()).decode("ascii")
+        # Save to disk
+        trend_path = os.path.join(BASE_DIR, "compare", f"metr_trend_{safe_metric}.png")
+        buf.seek(0)
+        with open(trend_path, "wb") as f:
+            f.write(buf.read())
 
     # Generate per-model comparison charts (both fits overlaid)
     for safe in safe_names:
@@ -272,6 +281,10 @@ def generate_viewer(all_results):
         plt.close(fig_cmp)
         buf.seek(0)
         charts[f"compare/per_model/{safe}_fit.png"] = base64.b64encode(buf.read()).decode("ascii")
+        # Save to disk
+        buf.seek(0)
+        with open(os.path.join(compare_dir, f"{safe}_fit.png"), "wb") as f:
+            f.write(buf.read())
 
         # Comparison binned chart
         log_primary = curve_files["logistic"]["y_full"]
@@ -287,6 +300,10 @@ def generate_viewer(all_results):
             plt.close(fig_bin)
             buf.seek(0)
             charts[f"compare/per_model/{safe}_binned.png"] = base64.b64encode(buf.read()).decode("ascii")
+            # Save to disk
+            buf.seek(0)
+            with open(os.path.join(compare_dir, f"{safe}_binned.png"), "wb") as f:
+                f.write(buf.read())
 
     viewer_data = json.dumps({
         "fits": {fid: {
