@@ -66,7 +66,7 @@ SHORT_NAMES = {
 
 WEIGHT_KEY = "invsqrt_task_weight"
 
-THRESHOLDS = [0.50]
+THRESHOLDS = [0.50, 0.80]
 
 BAR_TIMES = [1/6, 0.5, 1, 2, 4, 8, 15, 30, 60, 2*60, 4*60, 8*60, 16*60, 24*60]
 
@@ -285,14 +285,19 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     model.fit(X, y, w)
     y_full = model.predict(x_grid)
 
-    # Point estimates
-    p50_point = find_crossing(x_grid, y_full, 0.50)
-    integral_point = compute_integral_metric(x_grid, y_full)
-
     # Bootstrap
     ci_lo, ci_hi, ci_median, crossings_dict, integral_ci, boot_method = bootstrap_curves_and_crossings(
         X, y, w, model_factory, x_grid, n_boot=n_boot, seed=seed
     )
+
+    # For isotonic, use bootstrap median for threshold crossings (smoother across models)
+    use_median = getattr(model_factory, "bootstrap_type", "standard") == "m_out_of_n"
+    crossing_curve = ci_median if use_median else y_full
+
+    # Point estimates from appropriate curve
+    p50_point = find_crossing(x_grid, crossing_curve, 0.50)
+    p80_point = find_crossing(x_grid, crossing_curve, 0.80)
+    integral_point = compute_integral_metric(x_grid, y_full)
 
     # K-fold CV
     cv_stats = kfold_fit_quality(X, y, w, model_factory, n_folds=5, seed=seed)
@@ -338,6 +343,7 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     ))
 
     fig.add_hline(y=0.5, line_dash="dash", line_color="gray", opacity=0.4)
+    fig.add_hline(y=0.8, line_dash="dash", line_color="orange", opacity=0.3)
 
     fig.update_layout(
         title=(
@@ -359,6 +365,9 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
         "p50_minutes": p50_point,
         "p50_ci_lo": crossings_dict.get(0.50, {}).get("ci_lo"),
         "p50_ci_hi": crossings_dict.get(0.50, {}).get("ci_hi"),
+        "p80_minutes": p80_point,
+        "p80_ci_lo": crossings_dict.get(0.80, {}).get("ci_lo"),
+        "p80_ci_hi": crossings_dict.get(0.80, {}).get("ci_hi"),
         "integral_minutes": integral_point,
         "integral_ci_lo": integral_ci["ci_lo"],
         "integral_ci_hi": integral_ci["ci_hi"],
@@ -682,10 +691,11 @@ def run_ablation(
     avg_cv_log_loss = res_df["cv_log_loss"].mean()
     avg_is_brier = res_df["insample_brier"].mean()
 
-    # Trend charts: p50 and G[T]
+    # Trend charts: p50, p80, and G[T]
     trend_results = {}
     for metric_label, point_col, lo_col, hi_col in [
         ("p50", "p50_minutes", "p50_ci_lo", "p50_ci_hi"),
+        ("p80", "p80_minutes", "p80_ci_lo", "p80_ci_hi"),
         ("G[T]", "integral_minutes", "integral_ci_lo", "integral_ci_hi"),
     ]:
         fig_trend, doubling_days, r_sq = plot_metr_trend(
@@ -730,6 +740,9 @@ def run_ablation(
             "p50_minutes": round(row["p50_minutes"], 2) if row["p50_minutes"] else None,
             "p50_ci_lo": round(row["p50_ci_lo"], 2) if row["p50_ci_lo"] else None,
             "p50_ci_hi": round(row["p50_ci_hi"], 2) if row["p50_ci_hi"] else None,
+            "p80_minutes": round(row["p80_minutes"], 2) if row["p80_minutes"] else None,
+            "p80_ci_lo": round(row["p80_ci_lo"], 2) if row["p80_ci_lo"] else None,
+            "p80_ci_hi": round(row["p80_ci_hi"], 2) if row["p80_ci_hi"] else None,
             "integral_minutes": round(row["integral_minutes"], 2),
             "integral_ci_lo": round(row["integral_ci_lo"], 2) if row["integral_ci_lo"] else None,
             "integral_ci_hi": round(row["integral_ci_hi"], 2) if row["integral_ci_hi"] else None,

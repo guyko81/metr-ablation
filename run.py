@@ -57,12 +57,14 @@ def main():
 
     # Print comparison table
     print(f"\n{'Method':<22} {'CV-Brier':<12} {'CV-LogLoss':<12} {'IS-Brier':<12} "
-          f"{'p50 Dbl(d)':<12} {'p50 R2':<10} {'G[T] Dbl(d)':<12} {'G[T] R2':<10} {'Bootstrap'}")
-    print("-" * 120)
+          f"{'p50 Dbl(d)':<12} {'p50 R2':<10} {'p80 Dbl(d)':<12} {'p80 R2':<10} "
+          f"{'G[T] Dbl(d)':<12} {'G[T] R2':<10} {'Bootstrap'}")
+    print("-" * 150)
     for fit_id, _, _ in FITS:
         s = all_results[fit_id]
         fq = s["fit_quality"]
         t_p50 = s["trends"].get("p50", {})
+        t_p80 = s["trends"].get("p80", {})
         t_gt = s["trends"].get("G[T]", {})
         bt = s.get("bootstrap_type", "standard")
         print(f"{s['model_name']:<22} "
@@ -71,6 +73,8 @@ def main():
               f"{fq['avg_insample_brier']:<12.4f} "
               f"{t_p50.get('doubling_time_days', 'N/A'):<12} "
               f"{t_p50.get('r_squared', 'N/A'):<10} "
+              f"{t_p80.get('doubling_time_days', 'N/A'):<12} "
+              f"{t_p80.get('r_squared', 'N/A'):<10} "
               f"{t_gt.get('doubling_time_days', 'N/A'):<12} "
               f"{t_gt.get('r_squared', 'N/A'):<10} "
               f"{bt}")
@@ -95,20 +99,25 @@ def generate_viewer(all_results):
         model_list.append([alias, short, date])
 
     p50_data = {}
+    p80_data = {}
     gt_data = {}
     for fid in fit_ids:
         p50_data[fid] = {}
+        p80_data[fid] = {}
         gt_data[fid] = {}
         for entry in all_results[fid]["per_model_results"]:
             alias = entry["alias"]
             p50_data[fid][alias] = [entry["p50_minutes"], entry["p50_ci_lo"], entry["p50_ci_hi"]]
+            p80_data[fid][alias] = [entry["p80_minutes"], entry["p80_ci_lo"], entry["p80_ci_hi"]]
             gt_data[fid][alias] = [entry["integral_minutes"], entry["integral_ci_lo"], entry["integral_ci_hi"]]
 
     p50_trend = {}
+    p80_trend = {}
     gt_trend = {}
     for fid in fit_ids:
         t = all_results[fid]["trends"]
         p50_trend[fid] = [t["p50"]["doubling_time_days"], t["p50"]["r_squared"]]
+        p80_trend[fid] = [t["p80"]["doubling_time_days"], t["p80"]["r_squared"]]
         gt_trend[fid] = [t["G[T]"]["doubling_time_days"], t["G[T]"]["r_squared"]]
 
     safe_names = []
@@ -121,7 +130,7 @@ def generate_viewer(all_results):
     charts = {}
     for fid in fit_ids:
         fid_dir = os.path.join(BASE_DIR, fid)
-        for chart_name in ["metr_trend_p50.html", "metr_trend_GT.html"]:
+        for chart_name in ["metr_trend_p50.html", "metr_trend_p80.html", "metr_trend_GT.html"]:
             path = os.path.join(fid_dir, chart_name)
             with open(path, "r", encoding="utf-8") as cf:
                 content = cf.read()
@@ -150,8 +159,10 @@ def generate_viewer(all_results):
         "models": model_list,
         "safe_names": safe_names,
         "p50": p50_data,
+        "p80": p80_data,
         "gt": gt_data,
         "p50_trend": p50_trend,
+        "p80_trend": p80_trend,
         "gt_trend": gt_trend,
         "charts": charts,
     }, indent=2)
@@ -190,7 +201,7 @@ def generate_viewer(all_results):
 
   .metr-grid {{
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 4px;
     padding: 0 24px 16px;
   }}
@@ -272,8 +283,9 @@ def generate_viewer(all_results):
 
 <div class="section-title">Model Comparison Tables</div>
 <div class="tables-section">
-  <div class="tables-grid">
+  <div class="tables-grid" style="grid-template-columns: 1fr 1fr 1fr;">
     <div class="table-wrap"><h3>P50 Threshold Crossing (minutes)</h3><div id="p50Table"></div></div>
+    <div class="table-wrap"><h3>P80 Threshold Crossing (minutes)</h3><div id="p80Table"></div></div>
     <div class="table-wrap"><h3>G[T] Geometric Mean (minutes)</h3><div id="gtTable"></div></div>
   </div>
 </div>
@@ -309,14 +321,16 @@ function renderStats() {{
   const f = D.fits[currentFit];
   const q = f.fit_quality;
   const tp = f.trends.p50;
+  const t8 = f.trends.p80;
   const tg = f.trends["G[T]"];
   const bt = f.bootstrap_type;
   document.getElementById('statsRow').innerHTML = `
     <div class="stat-card"><div class="label">Avg CV-Brier</div><div class="value">${{q.avg_cv_brier.toFixed(4)}}</div><div class="sub">5-fold cross-validated</div></div>
     <div class="stat-card"><div class="label">Avg CV-LogLoss</div><div class="value">${{q.avg_cv_log_loss.toFixed(3)}}</div><div class="sub">5-fold cross-validated</div></div>
     <div class="stat-card"><div class="label">Avg InSample Brier</div><div class="value">${{q.avg_insample_brier.toFixed(4)}}</div><div class="sub">for reference only</div></div>
-    <div class="stat-card"><div class="label">Doubling (G[T])</div><div class="value">${{tg.doubling_time_days}}d</div><div class="sub">R&sup2; = ${{tg.r_squared.toFixed(4)}}</div></div>
     <div class="stat-card"><div class="label">Doubling (p50)</div><div class="value">${{tp.doubling_time_days}}d</div><div class="sub">R&sup2; = ${{tp.r_squared.toFixed(4)}}</div></div>
+    <div class="stat-card"><div class="label">Doubling (p80)</div><div class="value">${{t8.doubling_time_days}}d</div><div class="sub">R&sup2; = ${{t8.r_squared.toFixed(4)}}</div></div>
+    <div class="stat-card"><div class="label">Doubling (G[T])</div><div class="value">${{tg.doubling_time_days}}d</div><div class="sub">R&sup2; = ${{tg.r_squared.toFixed(4)}}</div></div>
     <div class="stat-card"><div class="label">Bootstrap</div><div class="value">${{bt === 'm_out_of_n' ? 'm-of-n' : 'standard'}}</div><div class="sub">${{bt === 'm_out_of_n' ? 'consistent for isotonic' : 'n-from-n'}}</div></div>
   `;
   document.getElementById('fitDescription').textContent = f.description;
@@ -325,12 +339,18 @@ function renderStats() {{
 function renderMetrGrid() {{
   const dir = currentFit;
   const tp = D.fits[currentFit].trends.p50;
+  const t8 = D.fits[currentFit].trends.p80;
   const tg = D.fits[currentFit].trends["G[T]"];
   document.getElementById('metrGrid').innerHTML = `
     <div class="metr-cell">
       <div class="cell-label">P50 Threshold</div>
       <div class="cell-stats">${{tp.doubling_time_days}}d | R&sup2;=${{tp.r_squared.toFixed(3)}}</div>
       <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_p50.html')}}"></iframe></div>
+    </div>
+    <div class="metr-cell">
+      <div class="cell-label">P80 Threshold</div>
+      <div class="cell-stats">${{t8.doubling_time_days}}d | R&sup2;=${{t8.r_squared.toFixed(3)}}</div>
+      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_p80.html')}}"></iframe></div>
     </div>
     <div class="metr-cell">
       <div class="cell-label">G[T] Geometric Mean</div>
@@ -451,6 +471,7 @@ for (const fid of D.fit_ids) {{
 }}
 
 buildTable(D.p50, D.p50_trend, 'p50Table');
+buildTable(D.p80, D.p80_trend, 'p80Table');
 buildTable(D.gt, D.gt_trend, 'gtTable');
 
 selectFit(D.fit_ids[0]);

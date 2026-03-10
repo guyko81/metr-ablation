@@ -33,9 +33,11 @@
 \begin{abstract}
 METR's Time Horizon benchmark is the most widely cited tracker of AI agent capability growth, with its headline finding---a capability doubling time of approximately four months---informing AI safety policy.
 We propose three concrete, drop-in improvements to METR's curve-fitting pipeline: (1)~replacing logistic regression with isotonic regression to avoid the symmetric-sigmoid assumption, (2)~replacing the $p_{50}$ threshold-crossing summary metric with a geometric-mean integral metric $G[T]$ that uses the entire fitted curve, and (3)~using $m$-out-of-$n$ bootstrap instead of standard bootstrap for theoretical consistency with shape-constrained estimators.
+We also report $p_{80}$ threshold crossings---the task duration at which models achieve 80\% success---as an additional reference point for ``easy task'' capability.
 We validate each improvement with 5-fold cross-validation on 18 frontier AI models.
 Isotonic regression improves cross-validated Brier score from $0.1212$ to $0.1115$ and cross-validated log-loss from $0.376$ to $0.368$.
-The $G[T]$ metric yields a doubling-time estimate of $128$--$130$ days with $R^2 \geq 0.916$ across both methods, compared to $118$--$121$ days with $R^2$ ranging from $0.811$ to $0.916$ under $p_{50}$.
+The $G[T]$ metric yields a doubling-time estimate of $128$--$130$ days with $R^2 \geq 0.916$ across both methods, compared to $121$--$130$ days with $R^2$ ranging from $0.852$ to $0.916$ under $p_{50}$.
+The $p_{80}$ threshold (easy-task frontier) shows doubling times of $111$--$121$ days with $R^2 = 0.881$--$0.901$.
 The good news: the headline conclusion---AI agent capabilities are doubling roughly every four months---is robust to all methodology choices we tested.
 The improvements make the estimate more defensible, not radically different.
 
@@ -60,6 +62,7 @@ Because this number matters, the statistical methodology behind it should be as 
 We identify three specific methodology choices in METR's pipeline where principled alternatives exist, and we show that adopting them yields better-calibrated fits and more stable trend estimates.
 Crucially, none of our improvements change the headline conclusion.
 The doubling time moves from $121$ days (logistic + $p_{50}$) to $130$ days (isotonic + $G[T]$)---still approximately four months---but the estimate becomes more defensible against methodological critique.
+For isotonic regression, we use the bootstrap median curve for threshold crossings rather than the single full-data fit, yielding smoother per-model values.
 
 Our three improvements are:
 \begin{enumerate}
@@ -135,7 +138,8 @@ The $p_{50}$ crossing point---the task duration $T$ at which $p(\log_2 T) = 0.5$
 It depends entirely on the fitted curve's behavior at one specific success level.
 For step-function curves (isotonic regression), $p_{50}$ can jump discontinuously between adjacent steps, introducing high variance.
 Even for smooth curves, small perturbations near the 50\% level can shift $p_{50}$ substantially.
-Indeed, switching from logistic to isotonic regression changes the per-model $p_{50}$ values dramatically---for example, Claude~Opus~4.5 shifts from $320$ to $119$ minutes---even though the overall doubling time remains similar ($121$ vs.\ $118$ days).
+Indeed, switching from logistic to isotonic regression changes the per-model $p_{50}$ values dramatically even though the overall doubling time remains similar.
+To mitigate this instability for isotonic regression, we report threshold crossings from the bootstrap \emph{median} curve rather than the single full-data fit, which produces smoother per-model values.
 This sensitivity to methodology at the individual-model level, while the trend is preserved, underscores that $p_{50}$ is not a reliable per-model summary.
 
 \paragraph{The fix.}
@@ -162,8 +166,9 @@ $G[T]$ dilutes this sensitive region with the stable bulk, producing a much more
 \paragraph{Evidence.}
 \begin{itemize}
   \item $G[T]$ doubling time: $128$--$130$ days across both methods ($R^2 = 0.916$--$0.921$).
-  \item $p_{50}$ doubling time: $118$--$121$ days ($R^2 = 0.811$--$0.916$).
-  \item The $R^2$ spread across methods shrinks from $0.105$ ($p_{50}$) to $0.005$ ($G[T]$).
+  \item $p_{50}$ doubling time: $121$--$130$ days ($R^2 = 0.852$--$0.916$).
+  \item $p_{80}$ doubling time: $111$--$121$ days ($R^2 = 0.881$--$0.901$).
+  \item The $R^2$ spread across methods shrinks from $0.064$ ($p_{50}$) to $0.005$ ($G[T]$).
 \end{itemize}
 
 Although the $p_{50}$ doubling time is roughly the same across methods ($\sim$\!$120$ days), the actual $p_{50}$ \emph{levels} change significantly between logistic and isotonic fits for individual models.
@@ -191,16 +196,17 @@ In our implementation, we use $m$-out-of-$n$ bootstrap for isotonic regression a
 
 \begin{table}[H]
 \centering
-\caption{Comparison of the three curve-fitting methods across all 18 models.
+\caption{Comparison of curve-fitting methods across all 18 models.
 CV-Brier and CV-LogLoss are 5-fold cross-validated averages.
-Doubling times and $R^2$ values come from exponential trend regression on per-model summary statistics vs.\ release date.}
+Doubling times and $R^2$ values come from exponential trend regression on per-model summary statistics vs.\ release date.
+$p_{80}$ captures the ``easy task'' frontier where models achieve 80\% success.}
 \label{tab:results}
-\begin{tabular}{@{}lcccccc@{}}
+\begin{tabular}{@{}lcccccccc@{}}
 \toprule
-\textbf{Method} & \textbf{CV-Brier} & \textbf{CV-LogLoss} & \textbf{$p_{50}$ Dbl} & \textbf{$p_{50}$ $R^2$} & \textbf{$G[T]$ Dbl} & \textbf{$G[T]$ $R^2$} \\
+\textbf{Method} & \textbf{CV-Brier} & \textbf{CV-LogLoss} & \textbf{$p_{50}$ Dbl} & \textbf{$p_{50}$ $R^2$} & \textbf{$p_{80}$ Dbl} & \textbf{$p_{80}$ $R^2$} & \textbf{$G[T]$ Dbl} & \textbf{$G[T]$ $R^2$} \\
 \midrule
-Logistic (METR)     & 0.1212 & 0.376 & 121\,d & 0.916 & 128\,d & 0.916 \\
-Isotonic            & 0.1115 & 0.368 & 118\,d & 0.811 & 130\,d & 0.921 \\
+Logistic (METR)     & 0.1212 & 0.376 & 121\,d & 0.916 & 121\,d & 0.901 & 128\,d & 0.916 \\
+Isotonic            & 0.1115 & 0.368 & 130\,d & 0.852 & 111\,d & 0.881 & 130\,d & 0.921 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -209,8 +215,9 @@ Isotonic            & 0.1115 & 0.368 & 118\,d & 0.811 & 130\,d & 0.921 \\
 \begin{enumerate}
   \item \textbf{Fit quality:} Isotonic wins on both CV-Brier ($0.1115$ vs.\ $0.1212$) and CV-LogLoss ($0.368$ vs.\ $0.376$), outperforming logistic out of sample.
   \item \textbf{Metric stability:} $G[T]$ produces nearly identical doubling times ($128$--$130$\,d) and $R^2$ values ($0.916$--$0.921$) across both methods.
-        Under $p_{50}$, the $R^2$ drops to $0.811$ for isotonic due to the step-function artifact, and individual-model $p_{50}$ values change dramatically between methods even though the trend slope is preserved.
-  \item \textbf{Headline robustness:} The doubling time is approximately four months ($\sim$\!$128$--$130$ days) regardless of methodology.
+        Under $p_{50}$, the $R^2$ drops to $0.852$ for isotonic, and individual-model $p_{50}$ values change between methods even though the trend slope is preserved.
+  \item \textbf{$p_{80}$ frontier:} The $p_{80}$ threshold captures how far models can go on ``easy'' tasks (80\% success rate). Its doubling time provides an alternative view of capability growth that is less sensitive to the transition zone around $p = 0.5$.
+  \item \textbf{Headline robustness:} The doubling time is approximately four months ($\sim$\!$128$--$130$ days under $G[T]$) regardless of methodology.
   \item \textbf{Recommendation:} Use isotonic regression with $G[T]$ for the most defensible estimate. $G[T]$ captures the full fitted curve in a single number, making it robust to the choice of curve-fitting method.
 \end{enumerate}
 
@@ -227,7 +234,7 @@ The viewer allows readers to:
 \begin{itemize}
   \item Switch between both fitting methods and compare aggregate statistics side by side.
   \item Inspect per-model curve fits with bootstrap confidence bands for all 18 models.
-  \item Compare $p_{50}$ and $G[T]$ trend charts with regression lines and confidence intervals.
+  \item Compare $p_{50}$, $p_{80}$, and $G[T]$ trend charts with regression lines and confidence intervals.
   \item View detailed comparison tables of per-model metrics across methods.
 \end{itemize}
 All visualizations are interactive (Plotly-based) with hover tooltips for exact values.
@@ -245,7 +252,7 @@ The entire analysis is reproducible:
 \paragraph{The trend is real and robust.}
 Our most important finding is negative in a positive sense: the methodology improvements do not overturn METR's headline result.
 The doubling time of AI agent capabilities is approximately four months, and this holds across both logistic and isotonic curve fitting, and across both $p_{50}$ and $G[T]$ summary metrics.
-What changes is the \emph{defensibility} of the estimate---a $G[T]$-based trend with $R^2 = 0.921$ is harder to dismiss than a $p_{50}$-based trend with $R^2 = 0.811$.
+What changes is the \emph{defensibility} of the estimate---a $G[T]$-based trend with $R^2 = 0.921$ is harder to dismiss than a $p_{50}$-based trend with $R^2 = 0.852$.
 
 \paragraph{Policy implications.}
 For decision-makers who rely on the METR doubling time to calibrate AI safety policy, our results are reassuring: the number is not an artifact of a particular curve-fitting choice.

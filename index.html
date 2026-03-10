@@ -155,7 +155,7 @@
         <p>G[T] = geometric mean capability time. Treats <span class="math">q</span>(<span class="math">u</span>) = 1 &minus; <span class="math">p</span>(<span class="math">u</span>) as a CDF in log<sub>2</sub>-space, computes E[U] via integration, returns 2<sup>E[U]</sup>.</p>
         <div class="evidence">
           <strong>Evidence:</strong> G[T] R&sup2;: <strong>0.916&ndash;0.921</strong> across all methods (nearly identical).<br>
-          p<sub>50</sub> R&sup2;: 0.811&ndash;0.916 (swings wildly by method).<br>
+          p<sub>50</sub> R&sup2;: 0.852&ndash;0.916 | p<sub>80</sub> R&sup2;: 0.881&ndash;0.901.<br>
           G[T] uses the entire curve, averaging over regions where all methods agree.
         </div>
       </div>
@@ -181,9 +181,11 @@
           <th>Method</th>
           <th>CV-Brier</th>
           <th>CV-LogLoss</th>
-          <th>p<sub>50</sub> Doubling</th>
+          <th>p<sub>50</sub> Dbl</th>
           <th>p<sub>50</sub> R&sup2;</th>
-          <th>G[T] Doubling</th>
+          <th>p<sub>80</sub> Dbl</th>
+          <th>p<sub>80</sub> R&sup2;</th>
+          <th>G[T] Dbl</th>
           <th>G[T] R&sup2;</th>
         </tr>
       </thead>
@@ -194,6 +196,8 @@
           <td>0.376</td>
           <td>121 d</td>
           <td>0.916</td>
+          <td>121 d</td>
+          <td>0.901</td>
           <td>128 d</td>
           <td>0.916</td>
         </tr>
@@ -201,8 +205,10 @@
           <td>Isotonic</td>
           <td class="best">0.1115</td>
           <td class="best">0.368</td>
-          <td>118 d</td>
-          <td>0.811</td>
+          <td>130 d</td>
+          <td>0.852</td>
+          <td>111 d</td>
+          <td>0.881</td>
           <td>130 d</td>
           <td class="best">0.921</td>
         </tr>
@@ -275,7 +281,7 @@
 cd metr-ablation
 pip install -r requirements.txt
 python run.py</pre>
-      <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">Generates all 36 per-model fit plots, 4 trend charts, comparison tables, and the interactive viewer.</p>
+      <p style="margin-top: 12px; font-size: 13px; color: var(--muted);">Generates all 36 per-model fit plots, 6 trend charts (p50, p80, G[T] × 2 methods), comparison tables, and the interactive viewer.</p>
     </div>
   </section>
 
