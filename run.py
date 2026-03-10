@@ -113,14 +113,14 @@ def generate_comparison_charts(all_results):
     comparison_html = f'''  <section>
     <h2>Logistic vs Isotonic: Direct Comparison</h2>
     <p style="font-size:14px; margin-bottom: 12px;">Both methods plotted on the same axes. Blue diamonds = logistic, green circles = isotonic (bootstrap median crossings).</p>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; position: relative;">
-        <div style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+        <div class="cmp-iframe-wrap" style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
           <iframe src="data:text/html;base64,{charts['p50']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
         </div>
       </div>
-      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; position: relative;">
-        <div style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+        <div class="cmp-iframe-wrap" style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
           <iframe src="data:text/html;base64,{charts['GT']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
         </div>
       </div>
@@ -151,7 +151,7 @@ def generate_comparison_charts(all_results):
     if 'scaleComparisonIframes' not in html:
         scale_script = '''<script>
 function scaleComparisonIframes() {
-  document.querySelectorAll('section iframe').forEach(iframe => {
+  document.querySelectorAll('.cmp-iframe-wrap iframe').forEach(iframe => {
     const wrap = iframe.parentElement;
     if (!wrap) return;
     const wrapW = wrap.clientWidth;
