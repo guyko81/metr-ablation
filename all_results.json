@@ -354,8 +354,8 @@
         "r_squared": 0.8812
       },
       "G[T]": {
-        "doubling_time_days": 129.5,
-        "r_squared": 0.9212
+        "doubling_time_days": 134.9,
+        "r_squared": 0.9184
       }
     },
     "n_boot": 200,
@@ -373,7 +373,7 @@
         "p80_minutes": 0.61,
         "p80_ci_lo": 0.26,
         "p80_ci_hi": 2.04,
-        "integral_minutes": 3.23,
+        "integral_minutes": 3.59,
         "integral_ci_lo": 1.84,
         "integral_ci_hi": 8.42,
         "boot_method": "m-out-of-n (m=103)"
@@ -390,7 +390,7 @@
         "p80_minutes": 2.39,
         "p80_ci_lo": 0.29,
         "p80_ci_hi": 10.23,
-        "integral_minutes": 16.92,
+        "integral_minutes": 21.2,
         "integral_ci_lo": 9.35,
         "integral_ci_hi": 40.53,
         "boot_method": "m-out-of-n (m=102)"
@@ -407,7 +407,7 @@
         "p80_minutes": 2.02,
         "p80_ci_lo": 0.67,
         "p80_ci_hi": 5.64,
-        "integral_minutes": 12.08,
+        "integral_minutes": 12.99,
         "integral_ci_lo": 6.65,
         "integral_ci_hi": 25.35,
         "boot_method": "m-out-of-n (m=101)"
@@ -424,7 +424,7 @@
         "p80_minutes": 21.7,
         "p80_ci_lo": 2.97,
         "p80_ci_hi": 88.37,
-        "integral_minutes": 51.58,
+        "integral_minutes": 58.97,
         "integral_ci_lo": 28.47,
         "integral_ci_hi": 103.01,
         "boot_method": "m-out-of-n (m=103)"
@@ -441,7 +441,7 @@
         "p80_minutes": 49.18,
         "p80_ci_lo": 9.68,
         "p80_ci_hi": 98.7,
-        "integral_minutes": 86.66,
+        "integral_minutes": 93.29,
         "integral_ci_lo": 52.18,
         "integral_ci_hi": 153.21,
         "boot_method": "m-out-of-n (m=124)"
@@ -458,7 +458,7 @@
         "p80_minutes": 51.3,
         "p80_ci_lo": 14.36,
         "p80_ci_hi": 95.5,
-        "integral_minutes": 86.22,
+        "integral_minutes": 92.92,
         "integral_ci_lo": 53.07,
         "integral_ci_hi": 161.2,
         "boot_method": "m-out-of-n (m=103)"
@@ -475,7 +475,7 @@
         "p80_minutes": 87.46,
         "p80_ci_lo": 27.24,
         "p80_ci_hi": 164.86,
-        "integral_minutes": 230.44,
+        "integral_minutes": 204.95,
         "integral_ci_lo": 115.59,
         "integral_ci_hi": 402.92,
         "boot_method": "m-out-of-n (m=103)"
@@ -492,7 +492,7 @@
         "p80_minutes": 0.81,
         "p80_ci_lo": 0.27,
         "p80_ci_hi": 2.27,
-        "integral_minutes": 3.37,
+        "integral_minutes": 3.77,
         "integral_ci_lo": 1.92,
         "integral_ci_hi": 7.46,
         "boot_method": "m-out-of-n (m=126)"
@@ -509,7 +509,7 @@
         "p80_minutes": 0.87,
         "p80_ci_lo": 0.24,
         "p80_ci_hi": 3.02,
-        "integral_minutes": 3.5,
+        "integral_minutes": 4.18,
         "integral_ci_lo": 1.8,
         "integral_ci_hi": 8.68,
         "boot_method": "m-out-of-n (m=102)"
@@ -526,7 +526,7 @@
         "p80_minutes": 0.99,
         "p80_ci_lo": 0.29,
         "p80_ci_hi": 4.15,
-        "integral_minutes": 3.67,
+        "integral_minutes": 4.1,
         "integral_ci_lo": 2.12,
         "integral_ci_hi": 8.06,
         "boot_method": "m-out-of-n (m=103)"
@@ -543,7 +543,7 @@
         "p80_minutes": 1.51,
         "p80_ci_lo": 0.29,
         "p80_ci_hi": 5.21,
-        "integral_minutes": 6.94,
+        "integral_minutes": 7.58,
         "integral_ci_lo": 3.88,
         "integral_ci_hi": 14.19,
         "boot_method": "m-out-of-n (m=103)"
@@ -560,7 +560,7 @@
         "p80_minutes": 64.36,
         "p80_ci_lo": 23.88,
         "p80_ci_hi": 99.7,
-        "integral_minutes": 155.77,
+        "integral_minutes": 158.56,
         "integral_ci_lo": 86.21,
         "integral_ci_hi": 274.29,
         "boot_method": "m-out-of-n (m=104)"
@@ -577,7 +577,7 @@
         "p80_minutes": 52.51,
         "p80_ci_lo": 43.11,
         "p80_ci_hi": 111.92,
-        "integral_minutes": 174.07,
+        "integral_minutes": 179.34,
         "integral_ci_lo": 119.17,
         "integral_ci_hi": 269.41,
         "boot_method": "m-out-of-n (m=124)"
@@ -594,7 +594,7 @@
         "p80_minutes": 99.64,
         "p80_ci_lo": 50.19,
         "p80_ci_hi": 179.91,
-        "integral_minutes": 264.69,
+        "integral_minutes": 245.74,
         "integral_ci_lo": 145.46,
         "integral_ci_hi": 482.69,
         "boot_method": "m-out-of-n (m=98)"
@@ -611,7 +611,7 @@
         "p80_minutes": 84.59,
         "p80_ci_lo": 45.83,
         "p80_ci_hi": 121.28,
-        "integral_minutes": 212.31,
+        "integral_minutes": 183.33,
         "integral_ci_lo": 117.93,
         "integral_ci_hi": 384.29,
         "boot_method": "m-out-of-n (m=103)"
@@ -628,7 +628,7 @@
         "p80_minutes": 6.05,
         "p80_ci_lo": 1.49,
         "p80_ci_hi": 49.04,
-        "integral_minutes": 35.68,
+        "integral_minutes": 41.67,
         "integral_ci_lo": 19.75,
         "integral_ci_hi": 69.88,
         "boot_method": "m-out-of-n (m=103)"
@@ -645,7 +645,7 @@
         "p80_minutes": 3.04,
         "p80_ci_lo": 1.05,
         "p80_ci_hi": 14.12,
-        "integral_minutes": 18.88,
+        "integral_minutes": 19.32,
         "integral_ci_lo": 12.39,
         "integral_ci_hi": 33.65,
         "boot_method": "m-out-of-n (m=141)"
@@ -662,7 +662,7 @@
         "p80_minutes": 51.39,
         "p80_ci_lo": 22.05,
         "p80_ci_hi": 100.08,
-        "integral_minutes": 106.46,
+        "integral_minutes": 116.75,
         "integral_ci_lo": 62.7,
         "integral_ci_hi": 207.51,
         "boot_method": "m-out-of-n (m=103)"

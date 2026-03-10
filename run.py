@@ -89,19 +89,20 @@ def main():
 def generate_comparison_charts(all_results):
     """Generate logistic-vs-isotonic comparison charts and update index.html."""
     import base64
-    import plotly.io as pio
+    import matplotlib.pyplot as plt
 
-    charts = {}
+    charts_b64 = {}
     for metric_label, point_col, lo_col, hi_col in [
         ("p50", "p50_minutes", "p50_ci_lo", "p50_ci_hi"),
         ("G[T]", "integral_minutes", "integral_ci_lo", "integral_ci_hi"),
     ]:
         fig = plot_metr_trend_comparison(all_results, metric_label, point_col, lo_col, hi_col)
         safe = metric_label.replace("[", "").replace("]", "")
-        path = os.path.join(BASE_DIR, f"comparison_{safe}.html")
-        pio.write_html(fig, path, include_plotlyjs="cdn")
-        with open(path, "r", encoding="utf-8") as f:
-            charts[safe] = base64.b64encode(f.read().encode("utf-8")).decode("ascii")
+        path = os.path.join(BASE_DIR, f"comparison_{safe}.png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        with open(path, "rb") as f:
+            charts_b64[safe] = base64.b64encode(f.read()).decode("ascii")
         print(f"  Comparison chart saved: {path}")
 
     # Update index.html with embedded charts
@@ -113,16 +114,12 @@ def generate_comparison_charts(all_results):
     comparison_html = f'''  <section>
     <h2>Logistic vs Isotonic: Direct Comparison</h2>
     <p style="font-size:14px; margin-bottom: 12px;">Both methods plotted on the same axes. Blue diamonds = logistic, green circles = isotonic (bootstrap median crossings).</p>
-    <div style="display: flex; flex-direction: column; gap: 12px;">
-      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
-        <div class="cmp-iframe-wrap" style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
-          <iframe src="data:text/html;base64,{charts['p50']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
-        </div>
+    <div style="display: flex; flex-direction: column; gap: 18px;">
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; padding: 8px;">
+        <img src="data:image/png;base64,{charts_b64['p50']}" style="width: 100%; height: auto;" alt="p50 comparison">
       </div>
-      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
-        <div class="cmp-iframe-wrap" style="width: 100%; aspect-ratio: 1100/650; overflow: hidden;">
-          <iframe src="data:text/html;base64,{charts['GT']}" style="border:none; width:1100px; height:650px; transform-origin:0 0;"></iframe>
-        </div>
+      <div style="background: #fff; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; padding: 8px;">
+        <img src="data:image/png;base64,{charts_b64['GT']}" style="width: 100%; height: auto;" alt="G[T] comparison">
       </div>
     </div>
   </section>'''
@@ -147,26 +144,15 @@ def generate_comparison_charts(all_results):
             f'{comparison_block}\n\n  <div class="viewer-promo">'
         )
 
-    # Add iframe scaling script if not present
-    if 'scaleComparisonIframes' not in html:
-        scale_script = '''<script>
-function scaleComparisonIframes() {
-  document.querySelectorAll('.cmp-iframe-wrap iframe').forEach(iframe => {
-    const wrap = iframe.parentElement;
-    if (!wrap) return;
-    const wrapW = wrap.clientWidth;
-    const nativeW = parseInt(iframe.style.width);
-    if (wrapW && nativeW) {
-      const scale = wrapW / nativeW;
-      iframe.style.transform = 'scale(' + scale + ')';
-    }
-  });
-}
-window.addEventListener('load', scaleComparisonIframes);
-window.addEventListener('resize', scaleComparisonIframes);
-</script>
-</body>'''
-        html = html.replace('</body>', scale_script)
+    # Remove old iframe scaling script if present
+    if 'scaleComparisonIframes' in html:
+        import re
+        html = re.sub(
+            r'<script>\s*function scaleComparisonIframes\(\).*?</script>\s*',
+            '',
+            html,
+            flags=re.DOTALL
+        )
 
     with open(index_path, "w", encoding="utf-8") as f:
         f.write(html)
@@ -174,9 +160,13 @@ window.addEventListener('resize', scaleComparisonIframes);
 
 
 def generate_viewer(all_results):
-    """Generate self-contained HTML viewer with embedded charts."""
+    """Generate self-contained HTML viewer with embedded PNG charts."""
     import base64
-    from pipeline import SHORT_NAMES
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from io import BytesIO
+    from pipeline import (SHORT_NAMES, plot_metr_trend_comparison,
+                          plot_per_model_fit_compare, plot_per_model_binned_compare)
 
     fit_ids = [f[0] for f in FITS]
     fit_labels = {f[0]: f[0].replace("_", " ").title() for f in FITS}
@@ -216,25 +206,87 @@ def generate_viewer(all_results):
         safe = alias.replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
         safe_names.append(safe)
 
-    # Read and base64-encode all pre-computed chart HTML files
+    # Read and base64-encode all pre-computed PNG chart files
     charts = {}
     for fid in fit_ids:
         fid_dir = os.path.join(BASE_DIR, fid)
-        for chart_name in ["metr_trend_p50.html", "metr_trend_p80.html", "metr_trend_GT.html"]:
+        for chart_name in ["metr_trend_p50.png", "metr_trend_p80.png", "metr_trend_GT.png"]:
             path = os.path.join(fid_dir, chart_name)
-            with open(path, "r", encoding="utf-8") as cf:
+            with open(path, "rb") as cf:
                 content = cf.read()
             key = f"{fid}/{chart_name}"
-            charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
+            charts[key] = base64.b64encode(content).decode("ascii")
         for safe in safe_names:
-            for suffix in ["_fit.html", "_binned.html"]:
+            for suffix in ["_fit.png", "_binned.png"]:
                 path = os.path.join(fid_dir, "per_model", f"{safe}{suffix}")
                 if not os.path.exists(path):
                     continue
-                with open(path, "r", encoding="utf-8") as cf:
+                with open(path, "rb") as cf:
                     content = cf.read()
                 key = f"{fid}/per_model/{safe}{suffix}"
-                charts[key] = base64.b64encode(content.encode("utf-8")).decode("ascii")
+                charts[key] = base64.b64encode(content).decode("ascii")
+
+    # Generate "compare" trend charts (both methods overlaid)
+    for metric_label, point_col, lo_col, hi_col in [
+        ("p50", "p50_minutes", "p50_ci_lo", "p50_ci_hi"),
+        ("p80", "p80_minutes", "p80_ci_lo", "p80_ci_hi"),
+        ("G[T]", "integral_minutes", "integral_ci_lo", "integral_ci_hi"),
+    ]:
+        fig = plot_metr_trend_comparison(all_results, metric_label, point_col, lo_col, hi_col)
+        safe_metric = metric_label.replace("[", "").replace("]", "")
+        buf = BytesIO()
+        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+        charts[f"compare/metr_trend_{safe_metric}.png"] = base64.b64encode(buf.read()).decode("ascii")
+
+    # Generate per-model comparison charts (both fits overlaid)
+    for safe in safe_names:
+        # Load curve data from both methods
+        curve_files = {}
+        for fid in fit_ids:
+            path = os.path.join(BASE_DIR, fid, "per_model", f"{safe}_curves.npz")
+            if os.path.exists(path):
+                curve_files[fid] = dict(np.load(path))
+        if len(curve_files) < 2:
+            continue
+        scatter_data = {
+            "human_minutes": curve_files[fit_ids[0]]["human_minutes"],
+            "score_binarized": curve_files[fit_ids[0]]["score_binarized"],
+            "weights": curve_files[fit_ids[0]]["weights"],
+        }
+        alias = None
+        for m in model_list:
+            s = m[0].replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
+            if s == safe:
+                alias = m[0]
+                break
+        if alias is None:
+            continue
+
+        # Comparison fit chart
+        fig_cmp = plot_per_model_fit_compare(alias, scatter_data,
+                                             curve_files["logistic"], curve_files["isotonic"])
+        buf = BytesIO()
+        fig_cmp.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+        plt.close(fig_cmp)
+        buf.seek(0)
+        charts[f"compare/per_model/{safe}_fit.png"] = base64.b64encode(buf.read()).decode("ascii")
+
+        # Comparison binned chart
+        log_primary = curve_files["logistic"]["y_full"]
+        iso_primary = curve_files["isotonic"]["ci_median"]
+        fig_bin = plot_per_model_binned_compare(
+            alias, scatter_data,
+            curve_files["logistic"]["x_grid"], log_primary,
+            curve_files["isotonic"]["x_grid"], iso_primary,
+        )
+        if fig_bin is not None:
+            buf = BytesIO()
+            fig_bin.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+            plt.close(fig_bin)
+            buf.seek(0)
+            charts[f"compare/per_model/{safe}_binned.png"] = base64.b64encode(buf.read()).decode("ascii")
 
     viewer_data = json.dumps({
         "fits": {fid: {
@@ -261,7 +313,7 @@ def generate_viewer(all_results):
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ablation v2: Logistic vs Isotonic</title>
+<title>Detailed Comparison: Logistic vs Isotonic</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }}
@@ -292,7 +344,7 @@ def generate_viewer(all_results):
   .metr-grid {{
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 4px;
+    gap: 8px;
     padding: 0 24px 16px;
   }}
   .metr-cell {{
@@ -308,24 +360,7 @@ def generate_viewer(all_results):
     background: rgba(0,0,0,0.7); color: white; padding: 2px 8px; border-radius: 4px;
     font-size: 9px;
   }}
-  .metr-cell .iframe-wrap {{
-    width: 100%; overflow: hidden;
-    aspect-ratio: 1100 / 650;
-  }}
-  .metr-cell .iframe-wrap iframe {{
-    border: none;
-    transform-origin: 0 0;
-    width: 1100px; height: 650px;
-  }}
-  .iframe-wrap {{
-    width: 100%; overflow: hidden;
-    aspect-ratio: 1100 / 650;
-  }}
-  .iframe-wrap iframe {{
-    border: none;
-    transform-origin: 0 0;
-    width: 1100px; height: 650px;
-  }}
+  .metr-cell img {{ width: 100%; height: auto; display: block; }}
 
   .models-section {{ padding: 0 24px 24px; }}
   .model-row {{
@@ -338,9 +373,8 @@ def generate_viewer(all_results):
     display: flex; justify-content: space-between; align-items: center;
   }}
   .model-row-header:hover {{ background: #f0f0f0; }}
-  .model-row-body {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }}
-  .model-row-body .iframe-wrap {{ height: 500px; }}
-  .model-row-body .iframe-wrap iframe {{ width: 1100px; height: 605px; }}
+  .model-row-body {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; }}
+  .model-row-body img {{ width: 100%; height: auto; }}
   .model-row.collapsed .model-row-body {{ display: none; }}
 
   .expand-controls {{ padding: 0 24px 8px; display: flex; gap: 8px; }}
@@ -366,7 +400,7 @@ def generate_viewer(all_results):
 <body>
 
 <header>
-  <h1>METR Time Horizon: Logistic vs Isotonic</h1>
+  <h1>Detailed Comparison: Logistic vs Isotonic</h1>
   <p>K-fold cross-validated fit quality | m-out-of-n bootstrap for isotonic | G[T] integral metric</p>
 </header>
 
@@ -399,8 +433,8 @@ def generate_viewer(all_results):
 <script>
 const D = {viewer_data};
 
-function chartSrc(key) {{
-  return "data:text/html;base64," + D.charts[key];
+function imgSrc(key) {{
+  return "data:image/png;base64," + D.charts[key];
 }}
 
 let currentFit = null;
@@ -413,10 +447,26 @@ function selectFit(fitId) {{
   renderStats();
   renderMetrGrid();
   renderModels();
-  requestAnimationFrame(scaleIframes);
 }}
 
 function renderStats() {{
+  if (currentFit === 'compare') {{
+    // Show stats for both methods side by side
+    let cards = '';
+    for (const fid of D.fit_ids) {{
+      const f = D.fits[fid];
+      const q = f.fit_quality;
+      const lab = D.fit_labels[fid];
+      cards += `
+        <div class="stat-card"><div class="label">${{lab}} CV-Brier</div><div class="value">${{q.avg_cv_brier.toFixed(4)}}</div></div>
+        <div class="stat-card"><div class="label">${{lab}} Dbl(p50)</div><div class="value">${{f.trends.p50.doubling_time_days}}d</div><div class="sub">R&sup2;=${{f.trends.p50.r_squared.toFixed(3)}}</div></div>
+        <div class="stat-card"><div class="label">${{lab}} Dbl(G[T])</div><div class="value">${{f.trends["G[T]"].doubling_time_days}}d</div><div class="sub">R&sup2;=${{f.trends["G[T]"].r_squared.toFixed(3)}}</div></div>
+      `;
+    }}
+    document.getElementById('statsRow').innerHTML = cards;
+    document.getElementById('fitDescription').textContent = 'Both logistic and isotonic fits overlaid for direct comparison.';
+    return;
+  }}
   const f = D.fits[currentFit];
   const q = f.fit_quality;
   const tp = f.trends.p50;
@@ -436,6 +486,23 @@ function renderStats() {{
 }}
 
 function renderMetrGrid() {{
+  if (currentFit === 'compare') {{
+    document.getElementById('metrGrid').innerHTML = `
+      <div class="metr-cell">
+        <div class="cell-label">P50 Comparison</div>
+        <img src="${{imgSrc('compare/metr_trend_p50.png')}}">
+      </div>
+      <div class="metr-cell">
+        <div class="cell-label">P80 Comparison</div>
+        <img src="${{imgSrc('compare/metr_trend_p80.png')}}">
+      </div>
+      <div class="metr-cell">
+        <div class="cell-label">G[T] Comparison</div>
+        <img src="${{imgSrc('compare/metr_trend_GT.png')}}">
+      </div>
+    `;
+    return;
+  }}
   const dir = currentFit;
   const tp = D.fits[currentFit].trends.p50;
   const t8 = D.fits[currentFit].trends.p80;
@@ -444,39 +511,63 @@ function renderMetrGrid() {{
     <div class="metr-cell">
       <div class="cell-label">P50 Threshold</div>
       <div class="cell-stats">${{tp.doubling_time_days}}d | R&sup2;=${{tp.r_squared.toFixed(3)}}</div>
-      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_p50.html')}}"></iframe></div>
+      <img src="${{imgSrc(dir + '/metr_trend_p50.png')}}">
     </div>
     <div class="metr-cell">
       <div class="cell-label">P80 Threshold</div>
       <div class="cell-stats">${{t8.doubling_time_days}}d | R&sup2;=${{t8.r_squared.toFixed(3)}}</div>
-      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_p80.html')}}"></iframe></div>
+      <img src="${{imgSrc(dir + '/metr_trend_p80.png')}}">
     </div>
     <div class="metr-cell">
       <div class="cell-label">G[T] Geometric Mean</div>
       <div class="cell-stats">${{tg.doubling_time_days}}d | R&sup2;=${{tg.r_squared.toFixed(3)}}</div>
-      <div class="iframe-wrap"><iframe src="${{chartSrc(dir + '/metr_trend_GT.html')}}"></iframe></div>
+      <img src="${{imgSrc(dir + '/metr_trend_GT.png')}}">
     </div>
   `;
 }}
 
 function renderModels() {{
+  if (currentFit === 'compare') {{
+    // In compare mode, show overlaid comparison charts per model
+    let html = '';
+    for (let i = 0; i < D.models.length; i++) {{
+      const [alias, short, date] = D.models[i];
+      const safe = D.safe_names[i];
+      const fitKey = 'compare/per_model/' + safe + '_fit.png';
+      const binnedKey = 'compare/per_model/' + safe + '_binned.png';
+      const hasFit = D.charts[fitKey] != null;
+      const hasBinned = D.charts[binnedKey] != null;
+      if (!hasFit) continue;
+      html += `<div class="model-row" id="row-${{i}}">
+        <div class="model-row-header" onclick="toggleModel(${{i}})">
+          <span>${{short}} <span style="font-weight:normal;color:#888;font-size:12px">(${{date}})</span></span>
+          <span class="toggle" style="font-size:12px;color:#888">Click to collapse</span>
+        </div>
+        <div class="model-row-body">
+          <img src="${{imgSrc(fitKey)}}">
+          ${{hasBinned ? `<img src="${{imgSrc(binnedKey)}}">` : ''}}
+        </div>
+      </div>`;
+    }}
+    document.getElementById('modelsSection').innerHTML = html;
+    return;
+  }}
   const dir = currentFit;
   let html = '';
   for (let i = 0; i < D.models.length; i++) {{
     const [alias, short, date] = D.models[i];
     const safe = D.safe_names[i];
-    const fitSrc = chartSrc(dir + '/per_model/' + safe + '_fit.html');
-    const binnedKey = dir + '/per_model/' + safe + '_binned.html';
+    const fitKey = dir + '/per_model/' + safe + '_fit.png';
+    const binnedKey = dir + '/per_model/' + safe + '_binned.png';
     const hasBinned = D.charts[binnedKey] != null;
-    const binnedSrc = hasBinned ? chartSrc(binnedKey) : '';
     html += `<div class="model-row" id="row-${{i}}">
       <div class="model-row-header" onclick="toggleModel(${{i}})">
         <span>${{short}} <span style="font-weight:normal;color:#888;font-size:12px">(${{date}})</span></span>
         <span class="toggle" style="font-size:12px;color:#888">Click to collapse</span>
       </div>
       <div class="model-row-body">
-        <div class="iframe-wrap"><iframe src="${{fitSrc}}"></iframe></div>
-        ${{hasBinned ? `<div class="iframe-wrap"><iframe src="${{binnedSrc}}"></iframe></div>` : ''}}
+        <img src="${{imgSrc(fitKey)}}">
+        ${{hasBinned ? `<img src="${{imgSrc(binnedKey)}}">` : ''}}
       </div>
     </div>`;
   }}
@@ -487,7 +578,6 @@ function toggleModel(i) {{
   const row = document.getElementById('row-' + i);
   const collapsed = row.classList.toggle('collapsed');
   row.querySelector('.toggle').textContent = collapsed ? 'Click to expand' : 'Click to collapse';
-  if (!collapsed) requestAnimationFrame(scaleIframes);
 }}
 
 function toggleAll(expand) {{
@@ -499,23 +589,6 @@ function toggleAll(expand) {{
     if (!expand && !isCollapsed) toggleModel(i);
   }}
 }}
-
-function scaleIframes() {{
-  document.querySelectorAll('.iframe-wrap').forEach(wrap => {{
-    const iframe = wrap.querySelector('iframe');
-    if (!iframe) return;
-    const nativeW = parseInt(iframe.style.width || getComputedStyle(iframe).width);
-    const nativeH = parseInt(iframe.style.height || getComputedStyle(iframe).height);
-    const wrapW = wrap.clientWidth;
-    const wrapH = wrap.clientHeight;
-    if (!wrapW || !wrapH || !nativeW || !nativeH) return;
-    const scale = Math.min(wrapW / nativeW, wrapH / nativeH);
-    iframe.style.transform = `scale(${{scale}})`;
-  }});
-}}
-
-const _resizeObserver = new ResizeObserver(() => scaleIframes());
-_resizeObserver.observe(document.body);
 
 function fmtMin(v) {{
   if (v == null) return 'N/A';
@@ -568,6 +641,14 @@ for (const fid of D.fit_ids) {{
   btn.onclick = () => selectFit(fid);
   bar.appendChild(btn);
 }}
+
+// Add Compare button
+const cmpBtn = document.createElement('button');
+cmpBtn.className = 'method-btn';
+cmpBtn.dataset.fitId = 'compare';
+cmpBtn.textContent = 'Compare';
+cmpBtn.onclick = () => selectFit('compare');
+bar.appendChild(cmpBtn);
 
 buildTable(D.p50, D.p50_trend, 'p50Table');
 buildTable(D.p80, D.p80_trend, 'p80Table');

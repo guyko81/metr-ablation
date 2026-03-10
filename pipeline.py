@@ -14,8 +14,10 @@ import os
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.io as pio
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from scipy.stats import linregress
 
 # ---------------------------------------------------------------------------
@@ -297,7 +299,7 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     # Point estimates from appropriate curve
     p50_point = find_crossing(x_grid, crossing_curve, 0.50)
     p80_point = find_crossing(x_grid, crossing_curve, 0.80)
-    integral_point = compute_integral_metric(x_grid, y_full)
+    integral_point = compute_integral_metric(x_grid, crossing_curve)
 
     # K-fold CV
     cv_stats = kfold_fit_quality(X, y, w, model_factory, n_folds=5, seed=seed)
@@ -305,61 +307,56 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
     # In-sample stats
     is_stats = insample_fit_quality(X, y, w, x_grid, y_full)
 
-    # Build figure
+    # Build matplotlib figure
     rng_j = np.random.default_rng(42)
     jitter = rng_j.uniform(-0.03, 0.03, len(df_model))
-    colors = df_model["score_binarized"].map({1: "royalblue", 0: "salmon"}).values
     ws = df_model[WEIGHT_KEY].values
     marker_size = 4 + 20 * (ws / ws.max())
     visible_ticks = get_time_ticks(minutes_grid)
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(12, 6.5))
 
-    fig.add_trace(go.Scatter(
-        x=df_model["human_minutes"].values, y=df_model["score_binarized"].values + jitter,
-        mode="markers", name="Runs",
-        marker=dict(size=marker_size, color=colors, opacity=0.4,
-                    line=dict(width=0.5, color="white")),
-    ))
+    # Scatter runs
+    colors_arr = ["royalblue" if s == 1 else "salmon" for s in df_model["score_binarized"].values]
+    ax.scatter(
+        df_model["human_minutes"].values,
+        df_model["score_binarized"].values + jitter,
+        s=marker_size * 3, c=colors_arr, alpha=0.4,
+        edgecolors="white", linewidths=0.5, zorder=3,
+    )
 
     ci_label = f"90% CI ({boot_method})"
-    fig.add_trace(go.Scatter(
-        x=np.concatenate([minutes_grid, minutes_grid[::-1]]),
-        y=np.concatenate([ci_hi, ci_lo[::-1]]),
-        fill="toself", fillcolor="rgba(100,100,200,0.2)",
-        line=dict(width=0), name=ci_label, hoverinfo="skip",
-    ))
+    ax.fill_between(minutes_grid, ci_lo, ci_hi, alpha=0.2, color="#6464c8", label=ci_label)
+    if use_median:
+        # Isotonic: bootstrap median is primary, single fit is secondary
+        ax.plot(minutes_grid, y_full, color="gray", linewidth=1.5, alpha=0.5, label="Single fit")
+        ax.plot(minutes_grid, ci_median, color="black", linewidth=2.5, label="Bootstrap median")
+    else:
+        # Logistic: single fit is primary, bootstrap median is secondary
+        ax.plot(minutes_grid, ci_median, color="#6464c8", alpha=0.6, linewidth=1.5, linestyle=":", label="Bootstrap median")
+        ax.plot(minutes_grid, y_full, color="black", linewidth=2.5, label="Fit")
 
-    fig.add_trace(go.Scatter(
-        x=minutes_grid, y=ci_median,
-        mode="lines", name="Bootstrap median",
-        line=dict(color="rgba(100,100,200,0.6)", width=1.5, dash="dot"),
-    ))
+    ax.axhline(0.5, color="gray", linestyle="--", alpha=0.4)
+    ax.axhline(0.8, color="orange", linestyle="--", alpha=0.3)
 
-    fig.add_trace(go.Scatter(
-        x=minutes_grid, y=y_full,
-        mode="lines", name="Fit",
-        line=dict(color="black", width=2.5),
-    ))
-
-    fig.add_hline(y=0.5, line_dash="dash", line_color="gray", opacity=0.4)
-    fig.add_hline(y=0.8, line_dash="dash", line_color="orange", opacity=0.3)
-
-    fig.update_layout(
-        title=(
-            f"{alias} - {model_factory.name}<br>"
-            f"<span style='font-size:11px;color:#666'>"
-            f"CV Brier: {cv_stats['cv_brier']:.4f} | "
-            f"CV LogLoss: {cv_stats['cv_log_loss']:.3f} | "
-            f"InSample Brier: {is_stats['insample_brier']:.4f} | "
-            f"{ci_label}</span>"
-        ),
-        xaxis=dict(title="Task length (human time)", type="log",
-                   tickvals=visible_ticks, ticktext=[fmt_time(t) for t in visible_ticks]),
-        yaxis=dict(title="P(success)", range=[-0.05, 1.05]),
-        template="plotly_white", width=1000, height=550,
-        legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"),
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(visible_ticks)
+    ax.set_xticklabels([fmt_time(t) for t in visible_ticks], fontsize=9)
+    ax.set_xlim(minutes_grid[0], minutes_grid[-1])
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlabel("Task length (human time)", fontsize=11)
+    ax.set_ylabel("P(success)", fontsize=11)
+    ax.set_title(
+        f"{alias} \u2014 {model_factory.name}\n"
+        f"CV Brier: {cv_stats['cv_brier']:.4f} | "
+        f"CV LogLoss: {cv_stats['cv_log_loss']:.3f} | "
+        f"InSample Brier: {is_stats['insample_brier']:.4f} | "
+        f"{ci_label}",
+        fontsize=11,
     )
+    ax.legend(loc="lower left", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
 
     results = {
         "p50_minutes": p50_point,
@@ -376,7 +373,7 @@ def plot_per_model_fit(alias, df_model, model_factory, n_boot=200, n_grid=500, s
         **is_stats,
     }
 
-    return fig, results, x_grid, y_full
+    return fig, results, x_grid, y_full, ci_median, ci_lo, ci_hi
 
 
 def plot_per_model_binned(alias, df_model, model_factory, x_grid, y_full):
@@ -439,45 +436,181 @@ def plot_per_model_binned(alias, df_model, model_factory, x_grid, y_full):
         return None
 
     labels = [b["label"] for b in bins]
-    p_success = [b["p_success"] for b in bins]
-    p_fail = [b["p_fail"] for b in bins]
+    p_success = np.array([b["p_success"] for b in bins])
+    p_fail = np.array([b["p_fail"] for b in bins])
     fit_means = [b["fit_mean"] for b in bins]
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(12, 6.5))
+    x_pos = np.arange(len(labels))
 
-    fig.add_trace(go.Bar(
-        x=labels, y=p_success, name="P(success)",
-        marker_color="#2e7d32", text=[f"{v:.0%}" for v in p_success],
-        textposition="inside", textfont=dict(size=10, color="white"),
-    ))
-    fig.add_trace(go.Bar(
-        x=labels, y=p_fail, name="P(failure)",
-        marker_color="#e65100", text=[f"{v:.0%}" if v > 0.05 else "" for v in p_fail],
-        textposition="inside", textfont=dict(size=10, color="white"),
-    ))
+    ax.bar(x_pos, p_success, color="#2e7d32", label="P(success)")
+    ax.bar(x_pos, p_fail, bottom=p_success, color="#e65100", label="P(failure)")
 
-    fig.add_trace(go.Scatter(
-        x=labels, y=fit_means, name="Fit mean",
-        mode="markers+lines", marker=dict(symbol="diamond", size=10, color="black",
-                                     line=dict(width=1, color="white")),
-        line=dict(width=2, color="black", dash="dot"),
-    ))
+    # Text inside bars
+    for i in range(len(labels)):
+        if p_success[i] > 0.08:
+            ax.text(i, p_success[i] / 2, f"{p_success[i]:.0%}", ha="center", va="center", color="white", fontsize=9)
+        if p_fail[i] > 0.08:
+            ax.text(i, p_success[i] + p_fail[i] / 2, f"{p_fail[i]:.0%}", ha="center", va="center", color="white", fontsize=9)
+        ax.text(i, 1.02, f"{p_success[i]:.0%}", ha="center", va="bottom", fontsize=8, color="#333")
 
-    # Empirical annotations on top of bars
-    for i, b in enumerate(bins):
-        fig.add_annotation(
-            x=labels[i], y=1.02, text=f"{b['p_success']:.0%}",
-            showarrow=False, font=dict(size=9), yref="y",
-        )
+    ax.plot(x_pos, fit_means, color="black", marker="D", markersize=8, linewidth=2, linestyle=":", label="Fit mean", zorder=5)
 
-    fig.update_layout(
-        barmode="stack",
-        title=f"{alias} - {model_factory.name} - Probability mass + empirical vs fit mean",
-        xaxis=dict(title="Task length (bin range, n=runs)", tickangle=-45, tickfont=dict(size=9)),
-        yaxis=dict(title="Probability", range=[0, 1.08], tickformat=".0%"),
-        template="plotly_white", width=1000, height=550,
-        legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"),
-    )
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(labels, rotation=-45, ha="left", fontsize=8)
+    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Probability", fontsize=11)
+    ax.set_xlabel("Task length (bin range, n=runs)", fontsize=11)
+    ax.set_title(f"{alias} \u2014 {model_factory.name} \u2014 Probability mass + empirical vs fit mean", fontsize=11)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.legend(loc="lower left", fontsize=9)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Per-model comparison charts (both methods overlaid)
+# ---------------------------------------------------------------------------
+
+def plot_per_model_fit_compare(alias, scatter_data, logistic_data, isotonic_data):
+    """Overlay logistic and isotonic fits on the same scatter chart."""
+    hm = scatter_data["human_minutes"]
+    sb = scatter_data["score_binarized"]
+    ws = scatter_data["weights"]
+
+    rng_j = np.random.default_rng(42)
+    jitter = rng_j.uniform(-0.03, 0.03, len(hm))
+    marker_size = 4 + 20 * (ws / ws.max())
+    colors_arr = ["royalblue" if s == 1 else "salmon" for s in sb]
+
+    fig, ax = plt.subplots(figsize=(12, 6.5))
+
+    ax.scatter(hm, sb + jitter, s=marker_size * 3, c=colors_arr, alpha=0.3,
+               edgecolors="white", linewidths=0.5, zorder=2)
+
+    COLORS = {"logistic": "#1565c0", "isotonic": "#2e7d32"}
+    LABELS = {"logistic": "Logistic fit", "isotonic": "Isotonic median"}
+    PRIMARY_KEY = {"logistic": "y_full", "isotonic": "ci_median"}
+
+    for fid in ["logistic", "isotonic"]:
+        data = logistic_data if fid == "logistic" else isotonic_data
+        mg = 2 ** data["x_grid"]
+        primary = data[PRIMARY_KEY[fid]]
+        color = COLORS[fid]
+        ax.fill_between(mg, data["ci_lo"], data["ci_hi"], alpha=0.1, color=color)
+        ax.plot(mg, primary, color=color, linewidth=2.5, label=LABELS[fid], zorder=4)
+
+    mg = 2 ** logistic_data["x_grid"]
+    visible_ticks = get_time_ticks(mg)
+
+    ax.axhline(0.5, color="gray", linestyle="--", alpha=0.4)
+    ax.axhline(0.8, color="orange", linestyle="--", alpha=0.3)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(visible_ticks)
+    ax.set_xticklabels([fmt_time(t) for t in visible_ticks], fontsize=9)
+    ax.set_xlim(mg[0], mg[-1])
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_xlabel("Task length (human time)", fontsize=11)
+    ax.set_ylabel("P(success)", fontsize=11)
+    ax.set_title(f"{alias} \u2014 Logistic vs Isotonic comparison", fontsize=11)
+    ax.legend(loc="lower left", fontsize=9)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_per_model_binned_compare(alias, scatter_data, x_grid_log, primary_logistic,
+                                  x_grid_iso, primary_isotonic):
+    """Stacked bar chart with both logistic and isotonic fit mean diamonds."""
+    hm = scatter_data["human_minutes"]
+    sb = scatter_data["score_binarized"]
+    ws = scatter_data["weights"]
+
+    edges_min = BAR_TIMES
+    bins = []
+    for i in range(len(edges_min) - 1):
+        lo, hi = edges_min[i], edges_min[i + 1]
+        mask = (hm >= lo) & (hm < hi)
+        if mask.sum() == 0:
+            continue
+        w_bin = ws[mask]
+        y_bin = sb[mask]
+        w_total = w_bin.sum()
+        w_success = (w_bin * y_bin).sum()
+        p_success = w_success / w_total if w_total > 0 else 0
+
+        center_log2 = (np.log2(lo) + np.log2(hi)) / 2
+        idx_log = np.argmin(np.abs(x_grid_log - center_log2))
+        idx_iso = np.argmin(np.abs(x_grid_iso - center_log2))
+
+        label = f"{fmt_time(lo)}-{fmt_time(hi)} n={mask.sum()}"
+        bins.append({
+            "label": label,
+            "p_success": p_success,
+            "p_fail": 1 - p_success,
+            "fit_logistic": float(primary_logistic[idx_log]),
+            "fit_isotonic": float(primary_isotonic[idx_iso]),
+        })
+
+    lo = edges_min[-1]
+    mask = hm >= lo
+    if mask.sum() > 0:
+        w_bin = ws[mask]
+        y_bin = sb[mask]
+        w_total = w_bin.sum()
+        w_success = (w_bin * y_bin).sum()
+        p_success = w_success / w_total if w_total > 0 else 0
+        center_log2 = np.log2(lo) + 0.5
+        idx_log = min(np.argmin(np.abs(x_grid_log - center_log2)), len(primary_logistic) - 1)
+        idx_iso = min(np.argmin(np.abs(x_grid_iso - center_log2)), len(primary_isotonic) - 1)
+        label = f">{fmt_time(lo)} n={mask.sum()}"
+        bins.append({
+            "label": label,
+            "p_success": p_success,
+            "p_fail": 1 - p_success,
+            "fit_logistic": float(primary_logistic[idx_log]),
+            "fit_isotonic": float(primary_isotonic[idx_iso]),
+        })
+
+    if not bins:
+        return None
+
+    labels = [b["label"] for b in bins]
+    p_success = np.array([b["p_success"] for b in bins])
+    p_fail = np.array([b["p_fail"] for b in bins])
+
+    fig, ax = plt.subplots(figsize=(12, 6.5))
+    x_pos = np.arange(len(labels))
+
+    ax.bar(x_pos, p_success, color="#4caf50", label="P(success)", alpha=0.7)
+    ax.bar(x_pos, p_fail, bottom=p_success, color="#e65100", label="P(failure)", alpha=0.7)
+
+    for i in range(len(labels)):
+        if p_success[i] > 0.08:
+            ax.text(i, p_success[i] / 2, f"{p_success[i]:.0%}", ha="center", va="center", color="white", fontsize=9)
+        ax.text(i, 1.02, f"{p_success[i]:.0%}", ha="center", va="bottom", fontsize=8, color="#333")
+
+    fit_log = [b["fit_logistic"] for b in bins]
+    fit_iso = [b["fit_isotonic"] for b in bins]
+
+    ax.plot(x_pos - 0.1, fit_log, color="#1565c0", marker="D", markersize=8, linewidth=2,
+            linestyle=":", label="Logistic fit", zorder=5)
+    ax.plot(x_pos + 0.1, fit_iso, color="#2e7d32", marker="D", markersize=8, linewidth=2,
+            linestyle=":", label="Isotonic median", zorder=5)
+
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(labels, rotation=-45, ha="left", fontsize=8)
+    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Probability", fontsize=11)
+    ax.set_xlabel("Task length (bin range, n=runs)", fontsize=11)
+    ax.set_title(f"{alias} \u2014 Logistic vs Isotonic \u2014 fit mean comparison", fontsize=11)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax.legend(loc="lower left", fontsize=9)
+    ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
 
     return fig
 
@@ -520,72 +653,48 @@ def plot_metr_trend(res_df, model_name_str,
     band_2lo = np.exp(intercept + slope * date_range - 1.96 * res_std)
     band_2hi = np.exp(intercept + slope * date_range + 1.96 * res_std)
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(13, 7.5))
 
-    # 2-sigma band
-    fig.add_trace(go.Scatter(
-        x=np.concatenate([dates_range_ts, dates_range_ts[::-1]]),
-        y=np.concatenate([band_2hi, band_2lo[::-1]]),
-        fill="toself", fillcolor="rgba(46,125,50,0.08)",
-        line=dict(width=0), showlegend=False, hoverinfo="skip",
-    ))
+    # Bands
+    ax.fill_between(dates_range_ts, band_2lo, band_2hi, alpha=0.08, color="#2e7d32")
+    ax.fill_between(dates_range_ts, band_1lo, band_1hi, alpha=0.12, color="#2e7d32")
+    ax.plot(dates_range_ts, trend, color="#2e7d32", linewidth=2)
 
-    # 1-sigma band
-    fig.add_trace(go.Scatter(
-        x=np.concatenate([dates_range_ts, dates_range_ts[::-1]]),
-        y=np.concatenate([band_1hi, band_1lo[::-1]]),
-        fill="toself", fillcolor="rgba(46,125,50,0.12)",
-        line=dict(width=0), showlegend=False, hoverinfo="skip",
-    ))
-
-    # Trend line
-    fig.add_trace(go.Scatter(
-        x=dates_range_ts, y=trend,
-        mode="lines", name="Exponential trend",
-        line=dict(color="#2e7d32", width=2), hoverinfo="skip",
-    ))
-
-    # Error bars
+    # Error bars and points
+    point_dates = [pd.Timestamp(d) for d in dates]
     for i in range(len(res_df)):
         lo = ci_lo[i] if ci_lo[i] is not None and not np.isnan(ci_lo[i]) else vals[i]
         hi = ci_hi[i] if ci_hi[i] is not None and not np.isnan(ci_hi[i]) else vals[i]
-        d = pd.Timestamp(dates[i])
-        fig.add_trace(go.Scatter(
-            x=[d, d], y=[lo, hi],
-            mode="lines", line=dict(color="#2e7d32", width=2),
-            showlegend=False, hoverinfo="skip",
-        ))
+        ax.plot([point_dates[i], point_dates[i]], [lo, hi], color="#2e7d32", linewidth=2, zorder=4)
 
-    # Points
-    point_dates = [pd.Timestamp(d) for d in dates]
-    hover_text = [
-        f"<b>{SHORT_NAMES.get(labels[i], labels[i])}</b><br>"
-        f"{metric_label}: {fmt_time(vals[i])}<br>"
-        f"Released: {pd.Timestamp(dates[i]).strftime('%Y-%m-%d')}"
-        for i in range(len(res_df))
-    ]
+    ax.scatter(point_dates, vals, color="#2e7d32", s=60, zorder=5, edgecolors="white", linewidths=1)
 
-    fig.add_trace(go.Scatter(
-        x=point_dates, y=vals,
-        mode="markers+text",
-        marker=dict(color="#2e7d32", size=9, line=dict(width=1, color="white")),
-        text=[SHORT_NAMES.get(l, l) for l in labels],
-        textposition="top center",
-        textfont=dict(size=9, color="#333"),
-        hovertemplate="%{customdata}<extra></extra>",
-        customdata=hover_text,
-        name="Models",
-    ))
+    # Labels
+    for i in range(len(res_df)):
+        short = SHORT_NAMES.get(labels[i], labels[i])
+        ax.annotate(short, (point_dates[i], vals[i]), textcoords="offset points",
+                    xytext=(0, 10), fontsize=8, ha="center", color="#333")
 
+    ax.set_yscale("log")
     ytick_minutes = [0.5, 1, 2, 4, 8, 15, 30, 60, 2*60, 4*60, 8*60, 16*60, 32*60, 64*60]
-    ytick_labels = []
+    ytick_labels_list = []
     for m in ytick_minutes:
         if m < 1:
-            ytick_labels.append(f"{m*60:.0f} sec")
+            ytick_labels_list.append(f"{m*60:.0f} sec")
         elif m < 60:
-            ytick_labels.append(f"{m:.0f} min")
+            ytick_labels_list.append(f"{m:.0f} min")
         else:
-            ytick_labels.append(f"{m/60:.0f} hr")
+            ytick_labels_list.append(f"{m/60:.0f} hr")
+    ax.set_yticks(ytick_minutes)
+    ax.set_yticklabels(ytick_labels_list, fontsize=9)
+    ax.set_ylim(max(min(vals[vals > 0]), 0.1) * 0.3, max(vals) * 5)
+
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9)
+
+    ax.set_xlabel("Model release date", fontsize=11)
+    ax.set_ylabel(f"Task time ({metric_label})", fontsize=11)
 
     stats_parts = []
     if avg_cv_brier is not None:
@@ -594,45 +703,30 @@ def plot_metr_trend(res_df, model_name_str,
         stats_parts.append(f"Avg CV-LogLoss: {avg_cv_log_loss:.3f}")
     stats_str = (" | " + " | ".join(stats_parts)) if stats_parts else ""
 
-    fig.update_layout(
-        title=dict(
-            text=(
-                f"Length of tasks AI agents have been able to complete autonomously<br>"
-                f"<span style='font-size:12px;color:#666'>"
-                f"{model_name_str} fit - {metric_label} - "
-                f"Doubling time: {doubling_time_days:.0f} days - "
-                f"R\u00b2 = {r_value**2:.2f}{stats_str}</span>"
-            ),
-            x=0.5,
-        ),
-        xaxis=dict(title="Model release date"),
-        yaxis=dict(
-            title=f"Task time ({metric_label})",
-            type="log",
-            tickvals=ytick_minutes,
-            ticktext=ytick_labels,
-            range=[np.log10(max(min(vals[vals > 0]), 0.1) * 0.3), np.log10(max(vals) * 5)],
-        ),
-        template="plotly_white",
-        width=1100, height=650,
-        showlegend=False,
-        hovermode="closest",
+    ax.set_title(
+        f"Length of tasks AI agents have been able to complete autonomously\n"
+        f"{model_name_str} fit \u2014 {metric_label} \u2014 "
+        f"Doubling time: {doubling_time_days:.0f} days \u2014 "
+        f"R\u00b2 = {r_value**2:.2f}{stats_str}",
+        fontsize=11,
     )
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
 
     return fig, doubling_time_days, r_value ** 2
 
 
 def plot_metr_trend_comparison(all_results, metric_label, point_col, ci_lo_col, ci_hi_col):
-    """Comparison chart: logistic vs isotonic on the same axes."""
-    import plotly.graph_objects as go
+    """Comparison chart: logistic vs isotonic on the same axes. Returns matplotlib figure."""
 
     COLORS = {"logistic": "#1565c0", "isotonic": "#2e7d32"}
     LABELS = {"logistic": "Logistic", "isotonic": "Isotonic"}
+    MARKERS = {"logistic": "D", "isotonic": "o"}
+    DASHES = {"logistic": "--", "isotonic": "-"}
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(13, 7.5))
 
     all_vals = []
-    all_date_nums = []
 
     for fid in ["logistic", "isotonic"]:
         summary = all_results[fid]
@@ -651,7 +745,6 @@ def plot_metr_trend_comparison(all_results, metric_label, point_col, ci_lo_col, 
             [(d - pd.Timestamp("1970-01-01")).days for d in dates], dtype=float
         )
         all_vals.extend(vals)
-        all_date_nums.extend(date_nums)
 
         log_vals = np.log(vals)
         valid_mask = np.isfinite(log_vals) & (vals > 0)
@@ -666,79 +759,52 @@ def plot_metr_trend_comparison(all_results, metric_label, point_col, ci_lo_col, 
         color = COLORS[fid]
         label = LABELS[fid]
 
-        # Trend line
-        fig.add_trace(go.Scatter(
-            x=dates_range_ts, y=trend,
-            mode="lines", name=f"{label} trend ({doubling_days:.0f}d, R²={r_value**2:.3f})",
-            line=dict(color=color, width=2, dash="dash" if fid == "logistic" else "solid"),
-            hoverinfo="skip",
-        ))
+        ax.plot(dates_range_ts, trend, color=color, linewidth=2, linestyle=DASHES[fid],
+                label=f"{label} trend ({doubling_days:.0f}d, R\u00b2={r_value**2:.3f})")
 
         # Error bars
         for i in range(len(valid_rows)):
-            lo = ci_lo[i] if not np.isnan(ci_lo[i]) else vals[i]
-            hi = ci_hi[i] if not np.isnan(ci_hi[i]) else vals[i]
-            fig.add_trace(go.Scatter(
-                x=[dates[i], dates[i]], y=[lo, hi],
-                mode="lines", line=dict(color=color, width=1.5),
-                showlegend=False, hoverinfo="skip",
-            ))
+            lo_v = ci_lo[i] if not np.isnan(ci_lo[i]) else vals[i]
+            hi_v = ci_hi[i] if not np.isnan(ci_hi[i]) else vals[i]
+            ax.plot([dates[i], dates[i]], [lo_v, hi_v], color=color, linewidth=1.5, zorder=4)
 
-        # Points
-        hover_text = [
-            f"<b>{SHORT_NAMES.get(aliases[i], aliases[i])}</b><br>"
-            f"{label} {metric_label}: {fmt_time(vals[i])}<br>"
-            f"Released: {dates[i].strftime('%Y-%m-%d')}"
-            for i in range(len(valid_rows))
-        ]
-        fig.add_trace(go.Scatter(
-            x=dates, y=vals,
-            mode="markers+text",
-            marker=dict(color=color, size=8, symbol="circle" if fid == "isotonic" else "diamond",
-                        line=dict(width=1, color="white")),
-            text=[SHORT_NAMES.get(a, a) for a in aliases],
-            textposition="top center",
-            textfont=dict(size=8, color=color),
-            hovertemplate="%{customdata}<extra></extra>",
-            customdata=hover_text,
-            name=f"{label} models",
-        ))
+        ax.scatter(dates, vals, color=color, marker=MARKERS[fid], s=50, zorder=5,
+                   edgecolors="white", linewidths=1, label=f"{label} models")
+
+        for i in range(len(valid_rows)):
+            short = SHORT_NAMES.get(aliases[i], aliases[i])
+            ax.annotate(short, (dates[i], vals[i]), textcoords="offset points",
+                        xytext=(0, 10), fontsize=7, ha="center", color=color)
 
     all_vals = np.array(all_vals)
+    ax.set_yscale("log")
     ytick_minutes = [0.5, 1, 2, 4, 8, 15, 30, 60, 2*60, 4*60, 8*60, 16*60, 32*60, 64*60]
-    ytick_labels = []
+    ytick_labels_list = []
     for m in ytick_minutes:
         if m < 1:
-            ytick_labels.append(f"{m*60:.0f} sec")
+            ytick_labels_list.append(f"{m*60:.0f} sec")
         elif m < 60:
-            ytick_labels.append(f"{m:.0f} min")
+            ytick_labels_list.append(f"{m:.0f} min")
         else:
-            ytick_labels.append(f"{m/60:.0f} hr")
+            ytick_labels_list.append(f"{m/60:.0f} hr")
+    ax.set_yticks(ytick_minutes)
+    ax.set_yticklabels(ytick_labels_list, fontsize=9)
+    ax.set_ylim(max(min(all_vals[all_vals > 0]), 0.1) * 0.3, max(all_vals) * 5)
 
-    fig.update_layout(
-        title=dict(
-            text=(
-                f"Logistic vs Isotonic: {metric_label} threshold crossing<br>"
-                f"<span style='font-size:12px;color:#666'>"
-                f"Both methods on the same axes for direct comparison</span>"
-            ),
-            x=0.5,
-        ),
-        xaxis=dict(title="Model release date"),
-        yaxis=dict(
-            title=f"Task time ({metric_label})",
-            type="log",
-            tickvals=ytick_minutes,
-            ticktext=ytick_labels,
-            range=[np.log10(max(min(all_vals[all_vals > 0]), 0.1) * 0.3), np.log10(max(all_vals) * 5)],
-        ),
-        template="plotly_white",
-        width=1100, height=650,
-        showlegend=True,
-        legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top",
-                    bgcolor="rgba(255,255,255,0.8)", bordercolor="#ddd", borderwidth=1),
-        hovermode="closest",
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    plt.setp(ax.get_xticklabels(), rotation=30, ha="right", fontsize=9)
+
+    ax.set_xlabel("Model release date", fontsize=11)
+    ax.set_ylabel(f"Task time ({metric_label})", fontsize=11)
+    ax.set_title(
+        f"Logistic vs Isotonic: {metric_label} threshold crossing\n"
+        f"Both methods on the same axes for direct comparison",
+        fontsize=12,
     )
+    ax.legend(loc="upper left", fontsize=9, framealpha=0.8, edgecolor="#ddd")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
 
     return fig
 
@@ -787,16 +853,31 @@ def run_ablation(
         df_m = runs[runs["alias"] == alias].copy()
         print(f"  Fitting {alias} ({len(df_m)} runs)...")
 
-        fig_fit, model_results, x_grid, y_full = plot_per_model_fit(
+        fig_fit, model_results, x_grid, y_full, ci_median, ci_lo, ci_hi = plot_per_model_fit(
             alias, df_m, model_factory, n_boot=n_boot, seed=seed
         )
 
-        fig_binned = plot_per_model_binned(alias, df_m, model_factory, x_grid, y_full)
+        # Use bootstrap median as primary curve for isotonic
+        use_med = getattr(model_factory, "bootstrap_type", "standard") == "m_out_of_n"
+        primary_curve = ci_median if use_med else y_full
+
+        fig_binned = plot_per_model_binned(alias, df_m, model_factory, x_grid, primary_curve)
 
         safe_name = alias.replace(" ", "_").replace("(", "").replace(")", "").replace(".", "_")
-        pio.write_html(fig_fit, os.path.join(per_model_dir, f"{safe_name}_fit.html"), include_plotlyjs="cdn")
+        fig_fit.savefig(os.path.join(per_model_dir, f"{safe_name}_fit.png"), dpi=150, bbox_inches="tight")
+        plt.close(fig_fit)
         if fig_binned is not None:
-            pio.write_html(fig_binned, os.path.join(per_model_dir, f"{safe_name}_binned.html"), include_plotlyjs="cdn")
+            fig_binned.savefig(os.path.join(per_model_dir, f"{safe_name}_binned.png"), dpi=150, bbox_inches="tight")
+            plt.close(fig_binned)
+
+        # Save curve data for comparison charts
+        np.savez_compressed(
+            os.path.join(per_model_dir, f"{safe_name}_curves.npz"),
+            x_grid=x_grid, y_full=y_full, ci_median=ci_median, ci_lo=ci_lo, ci_hi=ci_hi,
+            human_minutes=df_m["human_minutes"].values,
+            score_binarized=df_m["score_binarized"].values.astype(float),
+            weights=df_m[WEIGHT_KEY].values,
+        )
 
         row = {"alias": alias, "release_date": release_date}
         row.update(model_results)
@@ -827,11 +908,11 @@ def run_ablation(
             avg_cv_brier=avg_cv_brier, avg_cv_log_loss=avg_cv_log_loss,
         )
         safe_metric = metric_label.replace("[", "").replace("]", "")
-        pio.write_html(
-            fig_trend,
-            os.path.join(output_dir, f"metr_trend_{safe_metric}.html"),
-            include_plotlyjs="cdn",
+        fig_trend.savefig(
+            os.path.join(output_dir, f"metr_trend_{safe_metric}.png"),
+            dpi=150, bbox_inches="tight",
         )
+        plt.close(fig_trend)
         trend_results[metric_label] = {
             "doubling_time_days": round(doubling_days, 1),
             "r_squared": round(r_sq, 4),
